@@ -110,8 +110,8 @@
             border: 1px solid #EDF2F7;
             display: flex;
             flex-wrap: wrap;
-            gap: 4px;
-            padding: 6px;
+            gap: 2px;
+            padding: 4px 5px;
             align-content: center;
             justify-content: center;
             font-size: 12px;
@@ -135,8 +135,10 @@
             cursor: grabbing;
         }
 
-        .initials-badge { background: var(--initials-green) !important; color: white !important; font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; pointer-events: none; }
-        .location-tag { width: 100%; color: var(--primary); font-size: 9px; font-weight: 800; margin-top: 4px; border-top: 1px solid rgba(83, 28, 121, 0.1); padding-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .initials-row { width: 100%; display: flex; align-items: center; justify-content: center; gap: 2px; flex-wrap: nowrap; overflow: hidden; padding-bottom: 10px; }
+        .initials-badge { background: var(--initials-green) !important; color: white !important; font-size: 9px; font-weight: 700; padding: 2px 3px; border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; pointer-events: none; min-width: 0; max-width: 16%; overflow: hidden; text-overflow: clip; text-align: center; flex: 1 1 0; }
+        .location-tag { width: calc(100% - 8px); color: var(--primary); font-size: 8px; font-weight: 700; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; line-height: 1.1; }
+        .mobile-count { display: none; position: absolute; top: 2px; right: 4px; font-size: 10px; font-weight: 800; color: var(--primary); line-height: 1; }
         .slot.drag-target { outline: 2px dashed var(--reschedule-green); outline-offset: -2px; }
 
         #location-picker { position: fixed; background: white; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 20000; display: none; padding: 8px; min-width: 170px; max-height: 300px; overflow-y: auto; }
@@ -544,8 +546,9 @@
             .time-end { font-size: 7px; }
             td { padding: 0; }
             .slot { height: auto; min-height: 0; aspect-ratio: 1 / 1; padding: 0; gap: 0; border-radius: 2px; font-size: 0; }
-            .slot .initials-badge,
-            .slot .location-tag { display: none !important; }
+            .slot .initials-row { display: none !important; }
+            .slot .mobile-count { display: block; }
+            .slot .location-tag { display: block !important; width: calc(100% - 4px); font-size: 7px; font-weight: 700; bottom: 1px; }
             .title-band { padding: 16px 0 14px; }
             .controls-bar { padding: 12px; gap: 8px; flex-wrap: wrap; }
             .panel-header { padding: 8px 12px; }
@@ -1479,12 +1482,11 @@
                     <textarea id="slot-resident-note" rows="3" placeholder="Add an overall note for this timeslot"
                         onblur="autoSaveSlotNote(this.value, '${cleanId}')">${slotResidentNote}</textarea>
                 </div>` : ''}
-                <div class="dialog-actions" style="justify-content:space-between; margin-top:14px; align-items:center;">
+                <div class="dialog-actions" style="justify-content:flex-start; margin-top:14px; align-items:center;">
                     <button class="toggle-lock-btn ${isActuallyLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${cleanId}')">
                         <span>${isActuallyLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
                         <span class="toggle-lock-indicator"></span>
                     </button>
-                    <button class="dialog-btn dialog-btn-cancel" onclick="closeDetailsDialog()">Close</button>
                 </div>
             `;
             document.getElementById('confirm-overlay').style.display = 'block';
@@ -1650,6 +1652,11 @@
                 if (moveEntries.length > 0) {
                     const updates = {};
                     const sourceSlotIds = new Set();
+                    const scheduleState = (lastScheduleSnap && lastScheduleSnap.val()) || {};
+                    const scheduleLocations = scheduleState.locations || {};
+                    const scheduleNotes = scheduleState.slot_notes || {};
+                    const sourceLocation = scheduleLocations[sourceClean] || '';
+                    const sourceNote = scheduleNotes[sourceClean] || '';
                     for (const [key, value] of moveEntries) {
                         const req = normalizeRequest(value);
                         req.slotIds.forEach(slotId => sourceSlotIds.add(normalizeSlotId(slotId)));
@@ -1676,6 +1683,12 @@
 
                     // Update schedule to revert source slots
                     updates[`schedules/${CURRENT_USER_KEY}/available_slots`] = serializeAvailableSlots(newSchedule);
+                    updates[`schedules/${CURRENT_USER_KEY}/locations/${targetId}`] = sourceLocation;
+                    updates[`schedules/${CURRENT_USER_KEY}/slot_notes/${targetId}`] = sourceNote;
+                    if (sourceClean !== targetId) {
+                        updates[`schedules/${CURRENT_USER_KEY}/locations/${sourceClean}`] = null;
+                        updates[`schedules/${CURRENT_USER_KEY}/slot_notes/${sourceClean}`] = null;
+                    }
 
                     await db.ref().update(updates);
                     toggleRescheduleMode();
@@ -1775,6 +1788,15 @@
             }, 1000);
         }
 
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function render(snap) {
             lastScheduleSnap = snap;
             const snapVal = snap.val() || {};
@@ -1798,6 +1820,7 @@
             });
 
             const counts = {};
+            const slotInitialsMap = {};
 
             Object.values(allRequests).forEach(reqRaw => {
                 const req = normalizeRequest(reqRaw);
@@ -1807,11 +1830,22 @@
                         const cell = document.getElementById(id);
                         if (cell) {
                             counts[id] = (counts[id] || 0) + 1;
-                            const initials = req.applicant ? req.applicant.split(' ').map(n => n[0]).join('.') + '.' : 'N/A';
-                            cell.innerHTML += `<div class="initials-badge" data-label="${initials}">${initials}</div>`;
+                            const initials = req.applicant ? req.applicant.split(' ').map(n => n[0]).join('') : 'N/A';
+                            if (!slotInitialsMap[id]) slotInitialsMap[id] = [];
+                            slotInitialsMap[id].push(initials);
                         }
                     });
                 }
+            });
+
+            Object.entries(slotInitialsMap).forEach(([slotId, initialsList]) => {
+                const cell = document.getElementById(slotId);
+                if (!cell) return;
+                const badgeHtml = initialsList
+                    .map(initials => `<div class="initials-badge" data-label="${escapeHtml(initials)}">${escapeHtml(initials)}</div>`)
+                    .join('');
+                cell.innerHTML += `<div class="initials-row">${badgeHtml}</div>`;
+                cell.innerHTML += `<div class="mobile-count">${initialsList.length}</div>`;
             });
 
             const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
@@ -1828,7 +1862,7 @@
                     if (isLocked) {
                         el.classList.add('locked');
                         if (locs[clean]) {
-                            el.innerHTML += `<div class="location-tag" data-label="${locs[clean]}">${locs[clean]}</div>`;
+                            el.innerHTML += `<div class="location-tag" data-label="${escapeHtml(locs[clean])}">${escapeHtml(locs[clean])}</div>`;
                         }
                     } else if (!suppressAvailableHighlight) {
                         el.classList.add('available');
