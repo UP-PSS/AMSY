@@ -185,6 +185,32 @@
             width: min(92vw, 460px);
         }
 
+        .details-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .dialog-close-x {
+            border: 1px solid #CBD5E1;
+            background: #fff;
+            color: #64748b;
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
         #qr-dialog {
             display: none;
             position: fixed;
@@ -243,13 +269,73 @@
         }
 
         .details-applicant-item {
-            padding: 8px 10px;
+            padding: 7px 8px;
             border-radius: 8px;
             background: #F8FAFC;
             border: 1px solid #E2E8F0;
             font-size: 13px;
             font-weight: 700;
             color: #0F172A;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .details-applicant-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .details-applicant-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid #CBD5E1;
+            flex-shrink: 0;
+            background: #E2E8F0;
+        }
+
+        .details-applicant-avatar-fallback {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid #CBD5E1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            color: var(--primary);
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        .details-applicant-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .details-applicant-remove {
+            border: 1px solid #FCA5A5;
+            color: #DC2626;
+            background: #fff;
+            border-radius: 999px;
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
         }
 
         .details-notes {
@@ -597,11 +683,11 @@
         </div>
     </div>
     <div id="details-dialog">
-        <div class="dialog-title">Slot Details</div>
-        <div class="dialog-message" id="details-message">-</div>
-        <div class="dialog-actions">
-            <button class="dialog-btn dialog-btn-confirm" onclick="closeDetailsDialog()">Close</button>
+        <div class="details-header">
+            <div class="dialog-title" style="margin-bottom:0;">Slot Details</div>
+            <button class="dialog-close-x" onclick="closeDetailsDialog()" aria-label="Close slot details">×</button>
         </div>
+        <div class="dialog-message" id="details-message">-</div>
     </div>
     <div id="confirm-dialog">
         <div class="dialog-title" id="dialog-title">Confirm Action</div>
@@ -897,8 +983,12 @@
             const timeSlot = TIME_SLOTS.find(slot => slot.id === timeKey);
             if (!timeSlot) return slotId;
             const dayLabel = (DAY_NAME_LOOKUP[day.toUpperCase()] || day).toUpperCase();
-            const display = `${dayLabel} - ${timeSlot.start}`;
+            const display = `${dayLabel} - ${compactTimeLabel(timeSlot.start)}`;
             return isLocked ? `${display}(/)` : display;
+        }
+
+        function compactTimeLabel(timeLabel) {
+            return (timeLabel || '').replace(/\s+/g, '');
         }
 
         function parseStoredSlotValue(value) {
@@ -908,7 +998,7 @@
             if (clean.includes(' - ')) {
                 const [dayLabel, timeLabel] = clean.split(' - ').map(part => part.trim());
                 const dayName = DAY_NAME_LOOKUP[dayLabel.toUpperCase()] || dayLabel;
-                const slot = TIME_SLOTS.find(time => time.start.toUpperCase() === timeLabel.toUpperCase());
+                const slot = TIME_SLOTS.find(time => compactTimeLabel(time.start).toUpperCase() === compactTimeLabel(timeLabel).toUpperCase());
                 if (dayName && slot) {
                     return `${dayName}-${slot.id}${isLocked ? "(/)" : ""}`;
                 }
@@ -1102,9 +1192,24 @@
 
             if (isRescheduleMode) {
                 if (el.querySelector('.initials-badge')) {
-                    showSlotDetails(el);
+                    if (!selectedSourceId) {
+                        selectedSourceId = el.id;
+                        document.querySelectorAll('.slot').forEach(s => s.classList.remove('source-selected'));
+                        el.classList.add('source-selected');
+                        toast('👉 Slot selected. Pick destination slot.');
+                    } else if (selectedSourceId === el.id) {
+                        selectedSourceId = null;
+                        el.classList.remove('source-selected');
+                        toast('ℹ️ Source slot cleared.');
+                    } else {
+                        handleRescheduleAction(el);
+                    }
                 } else {
-                    toast('ℹ️ Tap approved slot to view details. Hold then drag to reschedule.');
+                    if (!selectedSourceId) {
+                        toast('ℹ️ Select an approved slot first.');
+                    } else {
+                        handleRescheduleAction(el);
+                    }
                 }
             } else if (isEditMode) {
                 manualLockedSlots.delete(el.id);
@@ -1305,7 +1410,18 @@
             const applicantRows = entries.length
                 ? entries.map(({ key, req, raw }) => {
                     const applicant = req.applicant || raw.applicant_name || 'Unknown applicant';
-                    return `<div class="details-applicant-item">${applicant}</div>`;
+                    const avatarUrl = req.applicantPic || '';
+                    const initials = applicant.split(' ').filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase() || 'A';
+                    const avatarTag = avatarUrl
+                        ? `<img class="details-applicant-avatar" src="${avatarUrl}" alt="${applicant}">`
+                        : `<span class="details-applicant-avatar-fallback">${initials}</span>`;
+                    return `<div class="details-applicant-item">
+                        <div class="details-applicant-main">
+                            ${avatarTag}
+                            <span class="details-applicant-name">${applicant}</span>
+                        </div>
+                        <button class="details-applicant-remove" onclick="cancelApprovedRequest('${key.replace(/'/g, "\\'")}')" aria-label="Cancel request for ${applicant}">×</button>
+                    </div>`;
                 }).join('')
                 : '<div>No approved applicants in this timeslot yet.</div>';
 
@@ -1320,7 +1436,7 @@
                 <div class="details-meta">
                     <div>
                         <div class="details-label">Time Slot</div>
-                        <div class="details-value">${(dayLabel || '').toUpperCase()} - ${timeLabel || ''}</div>
+                        <div class="details-value">${(dayLabel || '').toUpperCase()} - ${compactTimeLabel(timeLabel || '')}</div>
                     </div>
                     <div>
                         <div class="details-label">Location</div>
@@ -1338,8 +1454,8 @@
                     <textarea id="slot-resident-note" rows="3" placeholder="Add an overall note for this timeslot">${slotResidentNote}</textarea>
                 </div>
                 <div class="dialog-actions" style="justify-content:space-between; margin-top:14px; align-items:center;">
-                    <button class="toggle-lock-btn ${isManuallyLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${slotData}')">
-                        <span>${isManuallyLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
+                    <button class="toggle-lock-btn ${isLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${slotData}')">
+                        <span>${isLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
                         <span class="toggle-lock-indicator"></span>
                     </button>
                     <button class="dialog-btn dialog-btn-confirm" onclick="saveSlotDetails('${slotData}')">Save Details</button>
@@ -1347,6 +1463,14 @@
             `;
             document.getElementById('confirm-overlay').style.display = 'block';
             document.getElementById('details-dialog').style.display = 'block';
+        }
+
+        async function cancelApprovedRequest(requestKey) {
+            if (!requestKey || !allRequests[requestKey]) return;
+            const req = normalizeRequest(allRequests[requestKey]);
+            if (req.status !== 'approved') return;
+            await db.ref(`requests/${requestKey}/status`).set('cancelled');
+            toast('The approved request has been cancelled.');
         }
 
         async function saveSlotDetails(slotId) {
@@ -1862,6 +1986,7 @@
                 resident: req.resident || req.Resident || req.RESIDENT,
                 status: req.status || req.Status || req.STATUS,
                 applicant: req.applicant_name || req.applicant || req.Applicant || req.APPLICANT,
+                applicantPic: req.applicant_pic || req.applicantPic || req.profile_pic || req.profilePic || req.photo_url || req.photoUrl || req.userPic || '',
                 slotId,
                 slotIds: normalizedSlotIds
             };
