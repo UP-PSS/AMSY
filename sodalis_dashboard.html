@@ -347,7 +347,7 @@
 
         function resolveIframe(iframe, category) {
             if (iframe === 'home.html') {
-                return category === 'Resident' ? 'home_r.html' : 'home_a.html';
+                return category === 'Resident' ? 'sodalis_home.html' : 'applicant_home.html';
             }
             return iframe;
         }
@@ -374,8 +374,8 @@
                     { menuname: 'Homepage', iframe: 'home.html', category: 'Resident' },
                     { menuname: 'Applicant Info', iframe: 'profile.html', category: 'Resident' },
                     { menuname: 'Calendar', iframe: 'calendar.html', category: 'Resident' },
-                    { menuname: 'Schedule Availability', iframe: 'grid.html', category: 'Resident' },
-                    { menuname: 'Requests', iframe: 'requests.html', category: 'Resident' }
+                    { menuname: 'Schedule Availability', iframe: 'sodalis_schedule.html', category: 'Resident' },
+                    { menuname: 'Requests', iframe: 'sodalis_requests.html', category: 'Resident' }
                 ];
             }
 
