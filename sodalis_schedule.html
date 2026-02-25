@@ -1162,36 +1162,85 @@
             document.getElementById('confirm-overlay').style.display = 'none';
         }
 
-        async function handleQrCodeDecoded(decodedText) {
-            const prefix = 't.ly/';
-            if (!decodedText || !decodedText.startsWith(prefix)) {
-                return;
+        function normalizeApplicantCode(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function decodeUriSafe(value) {
+            try {
+                return decodeURIComponent(value);
+            } catch (_error) {
+                return value;
+            }
+        }
+
+        function extractApplicantCodeFromQr(decodedText) {
+            if (!decodedText) {
+                return '';
             }
 
-            await closeQrScanner();
+            const qrText = decodedText.trim();
+            if (!qrText) {
+                return '';
+            }
 
-            const applicantCode = decodedText.replace(prefix, '').trim();
+            const withScheme = /^https?:\/\//i.test(qrText) ? qrText : `https://${qrText}`;
+            try {
+                const parsedUrl = new URL(withScheme);
+                if (parsedUrl.hostname.toLowerCase() === 't.ly') {
+                    return decodeUriSafe(parsedUrl.pathname.replace(/^\/+/, '').trim());
+                }
+            } catch (_error) {
+                // Continue to fallback parsing below.
+            }
+
+            const cleanedText = qrText
+                .replace(/^https?:\/\/t\.ly\//i, '')
+                .replace(/^t\.ly\//i, '')
+                .split('?')[0]
+                .split('#')[0]
+                .trim();
+
+            return decodeUriSafe(cleanedText);
+        }
+
+        async function handleQrCodeDecoded(decodedText) {
+            const applicantCode = extractApplicantCodeFromQr(decodedText);
             if (!applicantCode) {
                 alert('Invalid QR code format.');
                 return;
             }
 
+            await closeQrScanner();
+
             let applicantName = '';
             try {
                 const { data, error } = await supabaseClient
                     .from('Applicants')
-                    .select('code, full_name')
-                    .or(`code.eq.${applicantCode}`)
-                    .limit(1);
+                    .select('*')
+                    .limit(1000);
                 if (error) {
                     throw error;
                 }
-                const applicantRow = (data || [])[0];
+
+                const normalizedScannedCode = normalizeApplicantCode(applicantCode);
+                const applicantRow = (data || []).find((row) => {
+                    const candidateCodes = [
+                        row.code,
+                        row.Code,
+                        row.applicant_code,
+                        row.applicantCode,
+                        row['Applicant code'],
+                        row['Applicant Code']
+                    ];
+                    return candidateCodes.some((candidate) => normalizeApplicantCode(candidate) === normalizedScannedCode);
+                });
+
                 if (!applicantRow) {
                     alert('Applicant code not found.');
                     return;
                 }
-                applicantName = applicantRow.Name || applicantRow.name || applicantRow.applicant_name || '';
+                applicantName = applicantRow.full_name || applicantRow.Name || applicantRow.name || applicantRow.applicant_name || '';
             } catch (error) {
                 console.error('Failed to validate applicant code', error);
                 alert('Unable to validate QR code right now.');
