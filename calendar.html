@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UPPSS | Modern Calendar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root { 
+            --primary: #531C79; 
+            --violet-soft: #f4effa; 
+            --bg: #F8FAFC; 
+            --border: #E2E8F0; 
+            --text-main: #0f172a; 
+            --text-sub: #64748b; 
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text-main);
+            min-height: 100vh;
+            padding-bottom: 60px;
+        }
+
+        .page-title {
+            font-weight: 900;
+            color: var(--primary);
+            font-size: clamp(32px, 6vw, 50px);
+            letter-spacing: -2px;
+            text-transform: uppercase;
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            line-height: 1;
+        }
+
+        main { 
+            display: grid; 
+            grid-template-columns: 1fr 380px; 
+            gap: 30px; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0 25px;
+        }
+
+        /* --- CALENDAR BOX --- */
+        .calendar-box { 
+            background: white; border-radius: 24px; padding: 25px; 
+            border: 1px solid var(--border); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); 
+        }
+        .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .cal-header h2 { font-size: 1.6rem; font-weight: 800; color: var(--text-main); }
+        
+        /* Grid columns fixed, rows set dynamically by JS */
+        .cal-grid { 
+            display: grid; 
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            border: 1px solid var(--border); 
+            border-radius: 12px; 
+            overflow: hidden; 
+        }
+        .cal-weekday { 
+            font-size: 11px; font-weight: 900; color: var(--primary); 
+            text-align: center; padding: 12px 0; text-transform: uppercase; 
+            background: var(--violet-soft); border-bottom: 1px solid var(--border);
+        }
+
+        .day-cell { 
+            border: 0.5px solid #f1f5f9; 
+            padding: 5px 0 4px 0;
+            position: relative; 
+            background: #fff;
+            min-width: 0;
+            /* visible so pills can bridge into adjacent cell — width locked by minmax(0,1fr) */
+            overflow: visible;
+        }
+        .day-cell.empty { opacity: 0.25; }
+        .day-num { 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            font-size: 13px; font-weight: 700;
+            color: var(--text-main);
+            margin-left: 5px; margin-bottom: 3px;
+        }
+        .day-cell.today .day-num { background: var(--primary); color: white; }
+
+        /* ---- CONNECTED EVENT PILLS ---- */
+        .event-pills-area {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            overflow: visible;
+            position: relative;
+            z-index: 3;
+        }
+
+        .pill {
+            height: 20px;
+            min-height: 20px;
+            max-height: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+            color: white;
+            cursor: pointer;
+            user-select: none;
+            transition: filter 0.15s ease;
+            position: relative;
+            z-index: 2;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .pill span {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+            line-height: 1;
+        }
+        .pill:hover { filter: brightness(1.1); }
+
+        .pill.p-single { border-radius: 99px; margin: 0 4px; width: calc(100% - 8px); }
+        .pill.p-start  { border-radius: 99px 0 0 99px; margin-left: 4px; width: calc(100% - 3px); }
+        .pill.p-mid    { border-radius: 0; margin: 0 -1px; width: calc(100% + 2px); }
+        .pill.p-end    { border-radius: 0 99px 99px 0; margin-left: -1px; margin-right: 4px; width: calc(100% - 3px); }
+
+        .pill-spacer { height: 20px; min-height: 20px; flex-shrink: 0; visibility: hidden; pointer-events: none; }
+
+        /* Mobile: hide text, show only colored bars */
+        @media (max-width: 640px) {
+            .pill span { display: none; }
+            .pill { height: 13px; min-height: 13px; max-height: 13px; }
+            .pill-spacer { height: 13px; min-height: 13px; }
+            .day-num { width: 20px; height: 20px; font-size: 11px; cursor: pointer; }
+        }
+
+        /* --- EVENT DETAIL MODAL --- */
+        .modal-backdrop {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal-box {
+            background: white; border-radius: 20px;
+            padding: 26px 26px 20px; max-width: 380px; width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            animation: popIn 0.2s ease;
+        }
+        @keyframes popIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to   { transform: scale(1);   opacity: 1; }
+        }
+        .modal-color-bar { height: 5px; border-radius: 99px; margin-bottom: 16px; }
+        .modal-title { font-size: 17px; font-weight: 900; color: var(--text-main); margin-bottom: 12px; line-height: 1.3; }
+        .modal-meta { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+        .modal-meta-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-sub); }
+        .modal-meta-row strong { color: var(--text-main); font-weight: 700; }
+        .modal-type-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 12px; border-radius: 99px;
+            font-size: 12px; font-weight: 800;
+        }
+        .badge-f2f    { background: #ECFDF5; color: #059669; }
+        .badge-online { background: #EFF6FF; color: #2563EB; }
+        .modal-close {
+            width: 100%; padding: 11px; border: none; border-radius: 10px;
+            background: var(--violet-soft); color: var(--primary);
+            font-weight: 800; font-size: 13px; cursor: pointer;
+        }
+        .modal-close:hover { background: #e4d4f4; }
+
+        /* Mobile day popup */
+        .day-events-list { display: flex; flex-direction: column; gap: 8px; }
+        .day-ev-item {
+            padding: 10px 14px; border-radius: 10px; cursor: pointer;
+            font-size: 13px; font-weight: 700; color: white;
+            transition: opacity 0.15s;
+        }
+        .day-ev-item:hover { opacity: 0.85; }
+        .no-events { font-size: 13px; color: var(--text-sub); text-align: center; padding: 16px 0; }
+
+        /* --- AGENDA PANEL --- */
+        .agenda-box { background: white; border-radius: 24px; padding: 25px; border: 1px solid var(--border); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); align-self: start; }
+        .agenda-header { display: flex; flex-direction: column; gap: 2px; margin-bottom: 20px; }
+        .agenda-label { font-size: 10px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.08em; }
+        .agenda-title { 
+            font-weight: 900; font-size: 1.1rem;
+            display: flex; align-items: center; gap: 10px;
+            color: var(--primary); text-transform: uppercase; letter-spacing: -0.5px;
+        }
+        .agenda-title::before { content: ''; width: 5px; height: 22px; background: var(--primary); border-radius: 3px; }
+        
+        .agenda-scroll { display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto; }
+        .agenda-scroll::-webkit-scrollbar { width: 4px; }
+        .agenda-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        .agenda-item { display: flex; gap: 10px; align-items: stretch; cursor: pointer; }
+
+        .date-card {
+            width: 66px; min-width: 66px; max-width: 66px;
+            height: 66px; min-height: 66px; max-height: 66px;
+            border-radius: 12px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .date-card .month { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: white; opacity: 0.85; }
+        .date-card .day-range { font-size: 17px; font-weight: 900; color: white; white-space: nowrap; }
+
+        .content-card {
+            background: #fff; border: 1px solid var(--border); border-radius: 12px;
+            padding: 10px 14px; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+            transition: transform 0.15s ease;
+        }
+        .agenda-item:hover .content-card { transform: translateX(3px); }
+        .ev-name { font-size: 13px; font-weight: 800; color: var(--text-main); line-height: 1.3; }
+        .ev-type { font-size: 10px; font-weight: 600; margin-top: 3px; }
+
+        .btn-icon { border: 1px solid var(--border); width: 40px; height: 40px; border-radius: 10px; background: white; cursor: pointer; color: var(--primary); font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
+        .btn-icon:hover { background: var(--violet-soft); }
+
+        .no-agenda { text-align: center; color: var(--text-sub); font-size: 13px; padding: 28px 0; }
+
+        @media (max-width: 1100px) {
+            main { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+            main { padding: 0 12px; gap: 20px; }
+            .calendar-box { padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="page-title">Calendar of Events</h1>
+
+    <main>
+        <section class="calendar-box">
+            <div class="cal-header">
+                <h2 id="monthDisplay"></h2>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-icon" onclick="changeMonth(-1)">❮</button>
+                    <button class="btn-icon" onclick="changeMonth(1)">❯</button>
+                </div>
+            </div>
+            <div class="cal-grid" id="calGrid">
+                <div class="cal-weekday">Sun</div>
+                <div class="cal-weekday">Mon</div>
+                <div class="cal-weekday">Tue</div>
+                <div class="cal-weekday">Wed</div>
+                <div class="cal-weekday">Thu</div>
+                <div class="cal-weekday">Fri</div>
+                <div class="cal-weekday">Sat</div>
+                <div id="calendarGrid" style="display:contents;"></div>
+            </div>
+        </section>
+
+        <section class="agenda-box">
+            <div class="agenda-header">
+                <span class="agenda-label">Upcoming</span>
+                <h3 class="agenda-title" id="agendaHeading">This Week</h3>
+            </div>
+            <div id="agendaList" class="agenda-scroll"></div>
+        </section>
+    </main>
+
+    <!-- Event Detail Modal -->
+    <div class="modal-backdrop" id="eventModal" onclick="handleModalBackdropClick(event,'eventModal')">
+        <div class="modal-box">
+            <div class="modal-color-bar" id="modalColorBar"></div>
+            <div class="modal-title" id="modalTitle"></div>
+            <div class="modal-meta" id="modalMeta"></div>
+            <button class="modal-close" onclick="closeEventModal()">Close</button>
+        </div>
+    </div>
+
+    <!-- Mobile Day Events Modal -->
+    <div class="modal-backdrop" id="dayModal" onclick="handleModalBackdropClick(event,'dayModal')">
+        <div class="modal-box">
+            <div class="modal-title" id="dayModalTitle" style="margin-bottom:14px;"></div>
+            <div class="day-events-list" id="dayEventsList"></div>
+            <button class="modal-close" style="margin-top:14px;" onclick="closeDayModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const SB_URL = 'https://havsuikahafqciurmaeq.supabase.co/rest/v1/Agenda?select=*';
+        const SB_KEY = 'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C';
+
+        let calDt = new Date();
+        let eventData = [];
+
+        // ---- COLOR FAMILIES: keyed by color name from Supabase ----
+        // Each family has 8 shades from darkest → lightest
+        const COLOR_SHADES = {
+            violet: ['#3B0764','#4C1D95','#5B21B6','#6D28D9','#7C3AED','#8B5CF6','#A78BFA','#C4B5FD'],
+            purple: ['#3B0764','#4C1D95','#5B21B6','#6D28D9','#7C3AED','#8B5CF6','#A78BFA','#C4B5FD'],
+            pink:   ['#831843','#9D174D','#BE185D','#DB2777','#EC4899','#F472B6','#F9A8D4','#FBCFE8'],
+            rose:   ['#881337','#9F1239','#BE123C','#E11D48','#F43F5E','#FB7185','#FDA4AF','#FECDD3'],
+            red:    ['#7F1D1D','#991B1B','#B91C1C','#DC2626','#EF4444','#F87171','#FCA5A5','#FECACA'],
+            green:  ['#052E16','#064E3B','#065F46','#047857','#059669','#10B981','#34D399','#6EE7B7'],
+            teal:   ['#042F2E','#134E4A','#115E59','#0F766E','#0D9488','#14B8A6','#2DD4BF','#5EEAD4'],
+            blue:   ['#172554','#1E3A8A','#1D4ED8','#2563EB','#3B82F6','#60A5FA','#93C5FD','#BFDBFE'],
+            cyan:   ['#083344','#164E63','#155E75','#0E7490','#0891B2','#06B6D4','#22D3EE','#67E8F9'],
+            orange: ['#431407','#7C2D12','#9A3412','#C2410C','#EA580C','#F97316','#FB923C','#FDBA74'],
+            yellow: ['#422006','#713F12','#854D0E','#A16207','#CA8A04','#EAB308','#FACC15','#FDE047'],
+            gray:   ['#111827','#1F2937','#374151','#4B5563','#6B7280','#9CA3AF','#D1D5DB','#E5E7EB'],
+            slate:  ['#0F172A','#1E293B','#334155','#475569','#64748B','#94A3B8','#CBD5E1','#E2E8F0'],
+            indigo: ['#1E1B4B','#312E81','#3730A3','#4338CA','#4F46E5','#6366F1','#818CF8','#A5B4FC'],
+        };
+
+        // Normalize a color name from Supabase → match a family key
+        function resolveFamily(raw) {
+            if (!raw) return null;
+            const key = raw.toString().toLowerCase().trim();
+            if (COLOR_SHADES[key]) return key;
+            // Fuzzy match
+            for (const k of Object.keys(COLOR_SHADES)) {
+                if (key.includes(k) || k.includes(key)) return k;
+            }
+            return null;
+        }
+
+        // Assign shades: group events by color family, then pick successive shades
+        function assignColors(events) {
+            // Track shade index per family
+            const familyIdx = {};
+            // Fallback: events without a color family get a round-robin across all families
+            const familyKeys = Object.keys(COLOR_SHADES);
+            let fallbackIdx = 0;
+
+            events.forEach(ev => {
+                const family = resolveFamily(ev.rawColor);
+                if (family) {
+                    if (familyIdx[family] === undefined) familyIdx[family] = 0;
+                    const shades = COLOR_SHADES[family];
+                    ev.color = shades[familyIdx[family] % shades.length];
+                    familyIdx[family]++;
+                } else {
+                    // No color specified — cycle through middle shades of each family
+                    const fb = familyKeys[fallbackIdx % familyKeys.length];
+                    const shades = COLOR_SHADES[fb];
+                    ev.color = shades[3]; // use the 4th shade (medium) as default
+                    fallbackIdx++;
+                }
+            });
+        }
+
+        function toMidnight(d) { const c = new Date(d); c.setHours(0,0,0,0); return c; }
+        function isMobile()    { return window.innerWidth <= 640; }
+
+        function fmtDate(d) {
+            return d.toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+        }
+
+        function handleModalBackdropClick(e, id) {
+            if (e.target === document.getElementById(id)) {
+                document.getElementById(id).classList.remove('open');
+            }
+        }
+
+        // ---- EVENT MODAL ----
+        function openEventModal(ev) {
+            document.getElementById('modalColorBar').style.background = ev.color;
+            document.getElementById('modalTitle').textContent = ev.title;
+
+            const same = ev.start.toDateString() === ev.end.toDateString();
+            const dateStr = same ? fmtDate(ev.start) : `${fmtDate(ev.start)} – ${fmtDate(ev.end)}`;
+
+            const t = (ev.type || '').toLowerCase();
+            const isF2F    = t.includes('f2f')    || t.includes('face');
+            const isOnline = t.includes('online') || t.includes('virtual') || t.includes('remote');
+
+            let badge = '';
+            if (isF2F)         badge = `<span class="modal-type-badge badge-f2f">📍 Face-to-Face</span>`;
+            else if (isOnline) badge = `<span class="modal-type-badge badge-online">💻 Online</span>`;
+            else if (ev.type)  badge = `<span class="modal-type-badge" style="background:#F1F5F9;color:#475569;">📋 ${ev.type}</span>`;
+
+            document.getElementById('modalMeta').innerHTML = `
+                <div class="modal-meta-row">📅 <strong>${dateStr}</strong></div>
+                ${badge ? `<div class="modal-meta-row">${badge}</div>` : ''}
+            `;
+            document.getElementById('eventModal').classList.add('open');
+        }
+        function closeEventModal() { document.getElementById('eventModal').classList.remove('open'); }
+
+        // ---- DAY MODAL (mobile) ----
+        function openDayModal(date, evs) {
+            document.getElementById('dayModalTitle').textContent =
+                date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+            const list = document.getElementById('dayEventsList');
+            if (!evs.length) {
+                list.innerHTML = `<div class="no-events">No events on this day</div>`;
+            } else {
+                list.innerHTML = evs.map(ev =>
+                    `<div class="day-ev-item" style="background:${ev.color}" data-id="${ev.id}">${ev.title}</div>`
+                ).join('');
+                list.querySelectorAll('.day-ev-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const found = eventData.find(e => String(e.id) === el.dataset.id);
+                        if (found) { closeDayModal(); setTimeout(() => openEventModal(found), 100); }
+                    });
+                });
+            }
+            document.getElementById('dayModal').classList.add('open');
+        }
+        function closeDayModal() { document.getElementById('dayModal').classList.remove('open'); }
+
+        // ---- THIS WEEK BOUNDS ----
+        function getWeekBounds() {
+            const now = toMidnight(new Date());
+            const sun = new Date(now); sun.setDate(now.getDate() - now.getDay());
+            const sat = new Date(sun); sat.setDate(sun.getDate() + 6);
+            return { sun, sat };
+        }
+
+        // ---- FETCH ----
+        async function initCalendar() {
+            try {
+                const res = await fetch(SB_URL, { headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`} });
+                const data = await res.json();
+                eventData = data.map((item, idx) => ({
+                    id:       item.id ?? idx,
+                    start:    toMidnight(new Date(item.start_date)),
+                    end:      toMidnight(new Date(item.end_date)),
+                    title:    item.agenda,
+                    type:     item.type || item.Type || item.event_type || '',
+                    rawColor: item.color || item.Color || '',
+                    color:    null
+                }));
+                // Sort chronologically, then assign shades per color family
+                eventData.sort((a, b) => a.start - b.start);
+                assignColors(eventData);
+                renderCalendar();
+            } catch(e) { console.error(e); }
+        }
+
+        // ---- RENDER ----
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            const list = document.getElementById('agendaList');
+            grid.innerHTML = ''; list.innerHTML = '';
+            document.getElementById('monthDisplay').innerText =
+                calDt.toLocaleDateString('en-us',{month:'long',year:'numeric'});
+
+            const year = calDt.getFullYear(), month = calDt.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const today = toMidnight(new Date());
+            const mobile = isMobile();
+
+            // Build 42-cell array
+            const cells = [];
+            for (let i = 0; i < 42; i++) {
+                const n = i - firstDay + 1;
+                cells.push((n > 0 && n <= daysInMonth) ? toMidnight(new Date(year,month,n)) : null);
+            }
+
+            // Sort events
+            const sorted = [...eventData].sort((a,b) => {
+                if (a.start - b.start) return a.start - b.start;
+                return (b.end - b.start) - (a.end - a.start);
+            });
+
+            // Track assignment
+            const cellTracks = Array.from({length:42}, () => []);
+            const eventTrack = {};
+            sorted.forEach(ev => {
+                const evCells = cells.reduce((acc,d,i) => { if(d && d>=ev.start && d<=ev.end) acc.push(i); return acc; }, []);
+                if (!evCells.length) return;
+                let track = 0;
+                while (evCells.some(ci => cellTracks[ci].includes(track))) track++;
+                evCells.forEach(ci => cellTracks[ci].push(track));
+                eventTrack[ev.id] = track;
+            });
+
+            // Compute per-row heights dynamically
+            const PILL_H = mobile ? 13 : 20;
+            const PILL_GAP = 3;
+            const DATE_H  = mobile ? 28 : 36;  // date number area
+            const ROW_PAD = 6;
+            const MIN_TRACKS = 1;
+
+            const rowHeights = [];
+            for (let row = 0; row < 6; row++) {
+                let maxT = 0;
+                for (let col = 0; col < 7; col++) {
+                    maxT = Math.max(maxT, cellTracks[row*7+col].length);
+                }
+                maxT = Math.max(maxT, MIN_TRACKS);
+                rowHeights.push(DATE_H + maxT * (PILL_H + PILL_GAP) + ROW_PAD);
+            }
+            document.getElementById('calGrid').style.gridTemplateRows =
+                `auto ${rowHeights.map(h=>h+'px').join(' ')}`;
+
+            // Build cell DOM
+            const cellEls = cells.map(date => {
+                const el = document.createElement('div');
+                el.className = 'day-cell' + (!date ? ' empty' : '');
+                if (!date) return el;
+
+                if (date.getTime() === today.getTime()) el.classList.add('today');
+
+                const numEl = document.createElement('div');
+                numEl.className = 'day-num';
+                numEl.textContent = date.getDate();
+
+                // Mobile: tap date number → show day's events
+                if (mobile) {
+                    numEl.addEventListener('click', () => {
+                        const dayEvs = eventData.filter(ev => date >= ev.start && date <= ev.end);
+                        openDayModal(date, dayEvs);
+                    });
+                }
+
+                el.appendChild(numEl);
+                const pillsArea = document.createElement('div');
+                pillsArea.className = 'event-pills-area';
+                el.appendChild(pillsArea);
+                return el;
+            });
+
+            // Inject pills
+            sorted.forEach(ev => {
+                const track = eventTrack[ev.id];
+                if (track === undefined) return;
+
+                cells.forEach((d, ci) => {
+                    if (!d || d < ev.start || d > ev.end) return;
+                    const pillsArea = cellEls[ci]?.querySelector('.event-pills-area');
+                    if (!pillsArea) return;
+
+                    // Insert spacers up to this track
+                    while (pillsArea.children.length < track) {
+                        const sp = document.createElement('div');
+                        sp.className = 'pill-spacer';
+                        pillsArea.appendChild(sp);
+                    }
+
+                    const isStart = d.getTime() === ev.start.getTime();
+                    const isEnd   = d.getTime() === ev.end.getTime();
+                    const isSun   = d.getDay() === 0;
+                    const isSat   = d.getDay() === 6;
+                    const segStart = isStart || isSun;
+                    const segEnd   = isEnd   || isSat;
+
+                    let shape;
+                    if (segStart && segEnd) shape = 'p-single';
+                    else if (segStart)      shape = 'p-start';
+                    else if (segEnd)        shape = 'p-end';
+                    else                    shape = 'p-mid';
+
+                    const pill = document.createElement('div');
+                    pill.className = `pill ${shape}`;
+                    pill.style.background = ev.color;
+
+                    // Show label only at segment start, desktop only
+                    if (!mobile && segStart) {
+                        const span = document.createElement('span');
+                        span.textContent = ev.title;
+                        pill.appendChild(span);
+                        pill.title = ev.title;
+                    }
+
+                    pill.addEventListener('click', e => { e.stopPropagation(); openEventModal(ev); });
+                    pillsArea.appendChild(pill);
+                });
+            });
+
+            cellEls.forEach(el => grid.appendChild(el));
+
+            // ---- AGENDA: THIS WEEK ----
+            const { sun, sat } = getWeekBounds();
+            const weekEvs = [...eventData]
+                .filter(ev => ev.end >= sun && ev.start <= sat)
+                .sort((a,b) => a.start - b.start);
+
+            if (!weekEvs.length) {
+                list.innerHTML = `<div class="no-agenda">No events this week</div>`;
+            } else {
+                weekEvs.forEach(ev => {
+                    const sM = ev.start.toLocaleDateString('en-us',{month:'short'});
+                    const sD = ev.start.getDate(), eD = ev.end.getDate();
+                    const same = ev.start.toDateString() === ev.end.toDateString();
+                    const dayDisp = same ? sD : `${sD}–${eD}`;
+
+                    const t = (ev.type||'').toLowerCase();
+                    const isF2F = t.includes('f2f') || t.includes('face');
+                    const isOnl = t.includes('online') || t.includes('virtual');
+                    let typeHTML = '';
+                    if (isF2F)      typeHTML = `<div class="ev-type" style="color:#059669;">📍 Face-to-Face</div>`;
+                    else if (isOnl) typeHTML = `<div class="ev-type" style="color:#2563EB;">💻 Online</div>`;
+                    else if (ev.type) typeHTML = `<div class="ev-type" style="color:#64748b;">📋 ${ev.type}</div>`;
+
+                    const item = document.createElement('div');
+                    item.className = 'agenda-item';
+                    item.innerHTML = `
+                        <div class="date-card" style="background:${ev.color};box-shadow:0 4px 12px ${ev.color}55;">
+                            <span class="month">${sM}</span>
+                            <span class="day-range">${dayDisp}</span>
+                        </div>
+                        <div class="content-card" style="border-left:4px solid ${ev.color};">
+                            <div class="ev-name">${ev.title}</div>
+                            ${typeHTML}
+                        </div>`;
+                    item.addEventListener('click', () => openEventModal(ev));
+                    list.appendChild(item);
+                });
+            }
+        }
+
+        function changeMonth(dir) { calDt.setMonth(calDt.getMonth()+dir); renderCalendar(); }
+
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(renderCalendar, 180);
+        });
+
+        initCalendar();
+    </script>
+</body>
+</html>

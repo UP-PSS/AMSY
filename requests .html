@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requests Inbox | Resident Portal</title>
+    
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style type="text/tailwindcss">
+        @theme {
+            --color-brand: #531C79;
+            --color-brand-light: #F4EFF8;
+            --font-sans: "Inter", system-ui, sans-serif;
+        }
+
+        .page-title {
+            font-family: 'Inter', sans-serif;
+            color: #531C79;
+            font-size: clamp(32px, 6vw, 50px);
+            font-weight: 900;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: -2px;
+            margin: 20px 0 5px 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .card-enter {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .history-card {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        .card-enter h4,
+        .history-card h4 {
+            word-break: break-word;
+        }
+
+        #toast {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translate(-50%, -12px);
+            background: linear-gradient(135deg, #531C79, #BE4AAD);
+            color: white;
+            padding: 12px 22px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            display: block;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 1000;
+            box-shadow: 0 12px 30px rgba(83, 28, 121, 0.35);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        #note-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            z-index: 2000;
+        }
+
+        #note-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            min-width: 320px;
+            max-width: 420px;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            z-index: 2001;
+        }
+
+        #note-dialog textarea {
+            width: 100%;
+            min-height: 90px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            font-size: 13px;
+            margin-top: 10px;
+            resize: vertical;
+        }
+
+        .note-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .note-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .note-btn-cancel {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .note-btn-confirm {
+            background: #ef4444;
+            color: white;
+        }
+
+        .maintenance-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2100;
+            padding: 20px;
+        }
+
+        .maintenance-card {
+            background: white;
+            border-radius: 20px;
+            padding: 28px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+        }
+
+        .maintenance-card h2 {
+            color: #531C79;
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+
+        .maintenance-card p {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .container-layout {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 30px;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        @media (max-width: 1200px) {
+            .container-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container-layout {
+                padding: 0 8px;
+                gap: 16px;
+            }
+            .card-enter {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-[#F9FAFB] font-sans antialiased text-gray-900 min-h-screen p-4 md:p-8">
+    <div id="toast"></div>
+    <div id="note-overlay"></div>
+    <div id="note-dialog">
+        <div class="dialog-title">Decline Request</div>
+        <div class="dialog-message">Add a note to explain why this request was declined.</div>
+        <textarea id="decline-note" placeholder="Type your note here..."></textarea>
+        <div class="note-actions">
+            <button class="note-btn note-btn-cancel" onclick="closeDeclineDialog()">Cancel</button>
+            <button class="note-btn note-btn-confirm" onclick="confirmDecline()">Submit</button>
+        </div>
+    </div>
+    <div class="maintenance-overlay" id="maintenanceOverlay">
+        <div class="maintenance-card">
+            <h2>Website Under Maintenance</h2>
+            <p>The portal is currently under maintenance. Please check back later.</p>
+        </div>
+    </div>
+
+    <header class="mb-10">
+        <h1 class="page-title">Requests</h1>
+        <div id="user-pill" class="flex justify-center">
+            <span class="bg-brand/5 text-brand text-[10px] font-black px-3 py-1 rounded-full border border-brand/10 uppercase tracking-widest">
+                Fetching Resident Identity...
+            </span>
+        </div>
+    </header>
+
+    <div class="container-layout">
+        <!-- Left: Pending Requests -->
+        <div>
+            <h2 class="text-xl font-black text-brand mb-4 uppercase tracking-tight">Pending Requests</h2>
+            <div id="inbox-container" class="space-y-3">
+                <div id="loader" class="flex flex-col items-center py-20">
+                    <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
+                    <p class="text-gray-400 text-xs mt-4 font-bold uppercase tracking-tighter">Syncing with Firebase...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: History -->
+        <div>
+            <h2 class="text-xl font-black text-brand mb-4 uppercase tracking-tight">History</h2>
+            <div id="history-container" class="space-y-3">
+                <div id="history-loader" class="flex flex-col items-center py-20">
+                    <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
+                    <p class="text-gray-400 text-xs mt-4 font-bold uppercase tracking-tighter">Loading history...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // 1. FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo",
+            authDomain: "uppss-26c6f.firebaseapp.com",
+            projectId: "uppss-26c6f",
+            storageBucket: "uppss-26c6f.firebasestorage.app",
+            messagingSenderId: "734429390148",
+            appId: "1:734429390148:web:97b7cad461e5505943a311"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const supabaseClient = supabase.createClient(
+            'https://havsuikahafqciurmaeq.supabase.co',
+            'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C'
+        );
+
+        const MAINTENANCE_ADMIN_EMAILS = ['avpaner@up.edu.ph', 'pnrjr.abl@gmail.com'];
+
+
+        function normalizeSettingTitle(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function isMaintenanceAdmin(email) {
+            if (!email) return false;
+            return MAINTENANCE_ADMIN_EMAILS.includes(email.toLowerCase());
+        }
+
+        async function checkMaintenanceSetting() {
+            try {
+                const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
+                if (error || !data) return;
+                const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
+                const isEnabled = setting && Number(setting['Number']) === 1;
+                const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+                const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
+                document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
+            } catch (err) {
+                console.warn('Maintenance check failed', err);
+            }
+        }
+
+        // 2. GET RESIDENT NAME FROM STORED USER DATA
+        function getResidentName() {
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+            
+            let userProfile = null;
+            if (sessionProfile) {
+                userProfile = JSON.parse(sessionProfile);
+            } else if (localProfile) {
+                userProfile = JSON.parse(localProfile);
+            }
+            
+            if (userProfile) {
+                return userProfile.userName || 'Unknown Resident';
+            }
+            
+            return "Unknown Resident";
+        }
+        
+        function getResidentClassification() {
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+            const profile = sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
+            return profile ? (profile.userClassification || '') : '';
+        }
+
+        function formatSlotId(slotId) {
+            if (!slotId) return 'N/A';
+            if (Array.isArray(slotId)) {
+                return formatSlotRange(slotId);
+            }
+            if (typeof slotId !== 'string') return 'N/A';
+            const parts = getSlotParts(slotId);
+            if (!parts) return slotId;
+            return `${parts.day.toUpperCase()} - ${parts.start}`;
+        }
+
+        function formatSlotRange(slotIds) {
+            if (!slotIds.length) return 'N/A';
+            const normalized = [...slotIds].filter(Boolean);
+            if (normalized.length === 1) return formatSlotId(normalized[0]);
+            const firstParts = getSlotParts(normalized[0]);
+            const lastParts = getSlotParts(normalized[normalized.length - 1]);
+            if (firstParts && lastParts && firstParts.day === lastParts.day) {
+                return `${firstParts.day.toUpperCase()} - ${firstParts.start} - ${lastParts.end}`;
+            }
+            return normalized.map(formatSlotId).join(' | ');
+        }
+
+        function getSlotParts(slotId) {
+            if (!slotId || typeof slotId !== 'string') return null;
+            const [day, time] = slotId.split('-');
+            if (!day || !time) return null;
+            const match = time.match(/(\\d{1,2})(\\d{2})(AM|PM)/i);
+            if (!match) return null;
+            const hour = Number(match[1]);
+            const minutes = Number(match[2]);
+            const period = match[3].toUpperCase();
+            const start = formatClockTime(hour, minutes, period);
+            const end = formatClockTime(...addMinutes(hour, minutes, period, 30));
+            return { day, start, end };
+        }
+
+        function addMinutes(hour, minutes, period, add) {
+            let totalHours = period === 'PM' && hour < 12 ? hour + 12 : period === 'AM' && hour === 12 ? 0 : hour;
+            let totalMinutes = totalHours * 60 + minutes + add;
+            totalMinutes = totalMinutes % (24 * 60);
+            const newHours24 = Math.floor(totalMinutes / 60);
+            const newMinutes = totalMinutes % 60;
+            const newPeriod = newHours24 >= 12 ? 'PM' : 'AM';
+            const displayHour = newHours24 % 12 === 0 ? 12 : newHours24 % 12;
+            return [displayHour, newMinutes, newPeriod];
+        }
+
+        function formatClockTime(hour, minutes, period) {
+            const paddedMinutes = String(minutes).padStart(2, '0');
+            return `${hour}:${paddedMinutes} ${period}`;
+        }
+
+        async function fetchResidentQuota() {
+            const classification = getResidentClassification();
+            if (!classification) return 3;
+            const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
+            if (error || !data) return 3;
+            const normalized = classification.toString().trim().toLowerCase();
+            const match = data.find(row => {
+                const title = row['Setting title'] || row['Settingtitle'];
+                return (title || '').toString().trim().toLowerCase() === normalized;
+            });
+            const quota = match ? Number(match['Number']) : NaN;
+            return Number.isFinite(quota) && quota > 0 ? quota : 3;
+        }
+
+        const residentName = getResidentName();
+        let slotQuota = 3;
+        fetchResidentQuota().then((quota) => { slotQuota = quota; });
+        document.getElementById('user-pill').innerHTML = `
+            <span class="bg-brand/5 text-brand text-[10px] font-black px-3 py-1 rounded-full border border-brand/10 uppercase tracking-widest">
+                Account: ${residentName}
+            </span>
+        `;
+
+        // 3. PENDING REQUESTS
+        const container = document.getElementById('inbox-container');
+        const loader = document.getElementById('loader');
+
+        const requestsRef = query(ref(db, "requests"), orderByChild("resident"), equalTo(residentName));
+
+        onValue(requestsRef, (snapshot) => {
+            loader.classList.add('hidden');
+            container.innerHTML = "";
+
+            const requests = snapshot.val() || {};
+            const approvedCounts = {};
+            Object.entries(requests).forEach(([, data]) => {
+                if (data.resident === residentName && data.status === 'approved') {
+                    const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
+                    slotIds.forEach(slotId => {
+                        approvedCounts[slotId] = (approvedCounts[slotId] || 0) + 1;
+                    });
+                }
+            });
+
+            const pendingItems = Object.entries(requests)
+                .filter(([, data]) => data.resident === residentName && data.status === 'pending');
+
+            if (pendingItems.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm">
+                        <p class="text-gray-400 font-bold text-sm uppercase tracking-tight">No pending requests found</p>
+                        <p class="text-gray-300 text-xs mt-1">Check back later or verify the resident name.</p>
+                    </div>`;
+                return;
+            }
+
+            pendingItems.forEach(([id, data]) => {
+                const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
+                const isFull = slotIds.some(slotId => (approvedCounts[slotId] || 0) >= slotQuota);
+                if (slotIds.length && isFull) {
+                    const requestRef = ref(db, `requests/${id}`);
+                    update(requestRef, {
+                        status: 'declined',
+                        status_message: 'Declined by System',
+                        resident_note: 'The slot is already full.'
+                    });
+                    return;
+                }
+                renderRequestCard(id, data);
+            });
+        }, (error) => {
+            console.error("Firebase Error:", error);
+            container.innerHTML = `<p class="text-red-500 text-center text-xs">Error connecting to database. Check rules.</p>`;
+        });
+
+        // 4. HISTORY (APPROVED & DECLINED)
+        const historyContainer = document.getElementById('history-container');
+        const historyLoader = document.getElementById('history-loader');
+
+        onValue(requestsRef, (snapshot) => {
+            historyLoader.classList.add('hidden');
+            historyContainer.innerHTML = "";
+
+            const historyItems = Object.entries(snapshot.val() || {})
+                .filter(([, data]) => data.resident === residentName && data.status !== 'pending')
+                .map(([id, data]) => ({ id, ...data }));
+
+            if (historyItems.length === 0) {
+                historyContainer.innerHTML = `
+                    <div class="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm">
+                        <p class="text-gray-400 font-bold text-sm uppercase tracking-tight">No history yet</p>
+                        <p class="text-gray-300 text-xs mt-1">Approved and declined requests will appear here.</p>
+                    </div>`;
+                return;
+            }
+
+            // Sort by timestamp (newest first)
+            historyItems.sort((a, b) => {
+                const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return timeB - timeA;
+            });
+
+            historyItems.forEach(item => {
+                renderHistoryCard(item.id, item);
+            });
+        }, (error) => {
+            console.error("Firebase Error:", error);
+            historyContainer.innerHTML = `<p class="text-red-500 text-center text-xs">Error loading history.</p>`;
+        });
+
+        // 5. UI RENDERER FOR PENDING
+        function renderRequestCard(id, data) {
+            const applicantName = data.applicant_name || data.applicant || 'Applicant';
+            const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
+            const initials = applicantName
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(part => part[0]?.toUpperCase() || '')
+                .join('') || 'A';
+            const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || data.profile_photo || data.profilePhoto || '';
+            const html = `
+                <div id="card-${id}" class="card-enter bg-white border border-brand/10 rounded-2xl p-4 shadow-sm group transition-all hover:border-brand/25">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0 flex items-center gap-3">
+                            ${applicantPhoto
+                                ? `<img src="${applicantPhoto}" alt="${applicantName}" class="w-10 h-10 rounded-full object-cover border border-brand/20">`
+                                : `<div class="w-10 h-10 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">${initials}</div>`}
+                            <div class="min-w-0">
+                                <h4 class="font-black text-gray-900 text-sm leading-tight break-words">${applicantName}</h4>
+                                <p class="text-[10px] text-brand font-bold uppercase mt-1 tracking-tight">Time Slot: ${formatSlotId(slotIds)}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button onclick="processAction('${id}', 'declined')" class="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition cursor-pointer" aria-label="Decline request">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                            <button onclick="processAction('${id}', 'approved')" class="p-2 rounded-lg bg-brand text-white hover:shadow-lg hover:shadow-brand/20 active:scale-95 transition cursor-pointer" aria-label="Approve request">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        }
+
+        // 6. UI RENDERER FOR HISTORY
+        function renderHistoryCard(id, data) {
+            const applicantName = data.applicant_name || data.applicant || 'Unknown';
+            const status = data.status || 'unknown';
+            const statusColor = status === 'approved' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800';
+            const statusIcon = status === 'approved' ? '✓' : '✗';
+            const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
+            
+            const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }) : 'N/A';
+
+            const html = `
+                <div id="history-${id}" class="history-card bg-white border rounded-2xl p-4 shadow-sm ${statusColor}">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 rounded-lg bg-white/80 flex items-center justify-center font-black text-sm">
+                                ${applicantName.charAt(0)}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-sm leading-none">${applicantName}</h4>
+                                <p class="text-[9px] font-bold uppercase mt-1 opacity-75">${formatSlotId(slotIds)}</p>
+                            </div>
+                        </div>
+                        <div class="text-xs font-black uppercase">${statusIcon} ${status}</div>
+                    </div>
+                    ${data.requested_location ? `<div class="text-[10px] font-bold uppercase opacity-70">Requested: ${data.requested_location}</div>` : ''}
+                    ${data.Location ? `<div class="text-[10px] font-bold uppercase opacity-70">Confirmed: ${data.Location}</div>` : ''}
+                    ${data.status_message ? `<div class="text-[10px] font-bold uppercase opacity-70">${data.status_message}</div>` : ''}
+                    ${data.note ? `<div class="text-[10px] opacity-70">Applicant Note: ${data.note}</div>` : ''}
+                    ${data.resident_note ? `<div class="text-[10px] opacity-70">Resident Note: ${data.resident_note}</div>` : ''}
+                    <div class="text-[10px] opacity-75 mt-2">
+                        ${timestamp}
+                    </div>
+                </div>
+            `;
+            historyContainer.insertAdjacentHTML('beforeend', html);
+        }
+
+        let pendingDeclineId = null;
+
+        function notify(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function openDeclineDialog(requestId) {
+            pendingDeclineId = requestId;
+            document.getElementById('decline-note').value = '';
+            document.getElementById('note-overlay').style.display = 'block';
+            document.getElementById('note-dialog').style.display = 'block';
+        }
+
+        function closeDeclineDialog() {
+            pendingDeclineId = null;
+            document.getElementById('note-overlay').style.display = 'none';
+            document.getElementById('note-dialog').style.display = 'none';
+        }
+
+        async function confirmDecline() {
+            const note = document.getElementById('decline-note').value.trim();
+            if (!note) {
+                notify('Please add a note before declining.');
+                return;
+            }
+            if (!pendingDeclineId) return;
+            const card = document.getElementById(`card-${pendingDeclineId}`);
+            if (card) {
+                card.style.opacity = "0.4";
+                card.style.pointerEvents = "none";
+            }
+            try {
+                const requestRef = ref(db, `requests/${pendingDeclineId}`);
+                await update(requestRef, { status: 'declined', status_message: 'Declined by Resident', resident_note: note });
+                notify('Request declined.');
+            } catch (err) {
+                console.error("Decline failed:", err);
+                notify('Decline failed.');
+                if (card) {
+                    card.style.opacity = "1";
+                    card.style.pointerEvents = "auto";
+                }
+            } finally {
+                closeDeclineDialog();
+            }
+        }
+
+        window.closeDeclineDialog = closeDeclineDialog;
+        window.confirmDecline = confirmDecline;
+
+        // 7. FIREBASE UPDATE ACTION
+        window.processAction = async (docId, status) => {
+            if (status === 'declined') {
+                openDeclineDialog(docId);
+                return;
+            }
+            const card = document.getElementById(`card-${docId}`);
+            if (card) {
+                card.style.opacity = "0.4";
+                card.style.pointerEvents = "none";
+            }
+            
+            try {
+                const requestRef = ref(db, `requests/${docId}`);
+                await update(requestRef, { status: status, status_message: 'Approved by Resident' });
+                notify('Request approved.');
+            } catch (err) {
+                console.error("Action failed:", err);
+                notify('Action failed.');
+                if (card) {
+                    card.style.opacity = "1";
+                    card.style.pointerEvents = "auto";
+                }
+            }
+        };
+
+        checkMaintenanceSetting();
+    </script>
+</body>
+</html>

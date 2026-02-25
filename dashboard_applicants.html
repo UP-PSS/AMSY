@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Applicant Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { 
+            --primary: #531C79; 
+            --bg: #F8FAFC; 
+            --border: #E2E8F0; 
+            --text-sub: #49A631; 
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); height: 100vh; min-height: 100dvh; display: flex; overflow: hidden; }
+
+        /* LOGO STYLING */
+        .logo-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            max-width: 150px; 
+            height: auto;
+            display: block;
+        }
+
+        .mobile-header .logo {
+            max-height: 35px;
+            width: auto;
+        }
+
+        /* SIDEBAR */
+        aside { width: 260px; background: white; border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; }
+        .nav-items { flex-grow: 1; }
+        .nav-item { padding: 14px 18px; border-radius: 14px; cursor: pointer; font-weight: 700; color: var(--text-sub); margin-bottom: 8px; transition: all 0.2s ease; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .nav-item.active { background: #f5f3ff; color: var(--primary); }
+        .nav-label { font-size: 0.85rem; line-height: 1.2; overflow-wrap: anywhere; }
+        .nav-content { display: flex; align-items: center; gap: 10px; }
+        .nav-icon { font-size: 18px; display: inline-flex; align-items: center; }
+
+        /* Sidebar Profile Section */
+        .sidebar-profile { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+        .user-info { font-size: 0.85rem; }
+        .user-name { font-weight: 700; color: #1e293b; display: block; }
+        .user-role { font-size: 0.75rem; color: var(--text-sub); }
+        .profile-menu {
+            position: absolute;
+            right: 0;
+            bottom: 60px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+            display: none;
+            flex-direction: column;
+            min-width: 160px;
+            z-index: 200;
+            overflow: hidden;
+        }
+        .profile-menu.show { display: flex; }
+
+        /* Mobile Header */
+        .mobile-header { display: none; position: fixed; top: 0; width: 100%; height: 60px; background: white; border-bottom: 1px solid var(--border); z-index: 100; align-items: center; justify-content: space-between; padding: 0 20px; }
+        .m-avatar { width: 35px; height: 35px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
+        .mobile-header .m-avatar { cursor: pointer; }
+        .mobile-profile-menu {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+            display: none;
+            flex-direction: column;
+            min-width: 160px;
+            z-index: 200;
+            overflow: hidden;
+        }
+        .mobile-profile-menu.show { display: flex; }
+        .profile-action {
+            background: transparent;
+            border: none;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 700;
+            color: #1e293b;
+            cursor: pointer;
+        }
+        .profile-action + .profile-action {
+            border-top: 1px solid var(--border);
+        }
+        .profile-action:hover {
+            background: #f8fafc;
+        }
+
+        /* MOBILE NAV */
+        .mobile-nav { display: none; position: fixed; bottom: 0; width: 100%; min-height: 72px; background: white; border-top: 1px solid var(--border); z-index: 100; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom); }
+        .m-nav-btn { flex: 1 0 88px; min-width: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: var(--text-sub); gap: 4px; padding: 8px 6px; }
+        .m-nav-label { font-size: 11px; text-align: center; line-height: 1.2; }
+        .m-nav-btn.active { color: var(--primary); }
+        .m-nav-icon { font-size: 18px; display: inline-flex; align-items: center; margin-top: 4px; }
+
+        /* VIEWPORT */
+        main { flex-grow: 1; height: 100vh; min-height: 100dvh; position: relative; min-height: 0; }
+        #main-content { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+        .view { display: none; height: 100%; width: 100%; flex: 1; }
+        .view.active { display: flex; }
+        iframe { width: 100%; height: 100%; min-height: 100%; border: none; }
+        .iframe-loader { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: rgba(83, 28, 121, 0.12); overflow: hidden; display: none; z-index: 5; }
+        .iframe-loader.active { display: block; }
+        .iframe-loader::after { content: ''; display: block; height: 100%; width: 40%; background: var(--primary); animation: loader-slide 1s infinite ease-in-out; }
+        @keyframes loader-slide { 0% { transform: translateX(-120%); } 100% { transform: translateX(260%); } }
+
+        .maintenance-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .maintenance-card {
+            background: white;
+            border-radius: 20px;
+            padding: 28px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+        }
+
+        .maintenance-card h2 {
+            color: var(--primary);
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+
+        .maintenance-card p {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 1100px) {
+            aside { display: none; }
+            .mobile-header { display: flex; }
+            .mobile-nav { display: flex; }
+            main { height: calc(100dvh - 132px); margin-top: 60px; }
+            .view { overflow: hidden; }
+        }
+
+        @media (max-width: 640px) {
+            .mobile-header { padding: 0 14px; }
+            .m-nav-icon { font-size: 20px; margin-top: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="mobile-header">
+        <img src="logo.png" alt="Logo" class="logo">
+        <div class="m-avatar" id="mobileAvatar">--</div>
+        <div class="mobile-profile-menu" id="mobileProfileMenu">
+            <button class="profile-action" type="button" data-action="profile">View Profile</button>
+            <button class="profile-action" type="button" data-action="logout">Log Out</button>
+        </div>
+    </header>
+    <div class="maintenance-overlay" id="maintenanceOverlay">
+        <div class="maintenance-card">
+            <h2>Website Under Maintenance</h2>
+            <p>The portal is currently under maintenance. Please check back later.</p>
+        </div>
+    </div>
+
+    <aside>
+        <div class="logo-container">
+            <img src="logo.png" alt="Logo" class="logo">
+        </div>
+        
+        <div class="nav-items" id="nav-items"></div>
+
+        <div class="sidebar-profile" id="desktopProfileTrigger" role="button" tabindex="0" aria-label="Open profile actions">
+            <div class="avatar">--</div>
+            <div class="user-info">
+                <span class="user-name">Loading...</span>
+                <span class="user-role">Applicant</span>
+            </div>
+            <div class="profile-menu" id="desktopProfileMenu">
+                <button class="profile-action" type="button" data-action="profile">View Profile</button>
+                <button class="profile-action" type="button" data-action="logout">Log Out</button>
+            </div>
+        </div>
+    </aside>
+
+    <nav class="mobile-nav" id="mobile-nav"></nav>
+
+    <main>
+        <div class="iframe-loader" id="iframe-loader"></div>
+        <div id="main-content"></div>
+    </main>
+
+    <!-- Hidden storage for user data -->
+    <div id="user-data-storage" style="display: none;"></div>
+
+    <script>
+        // --- USER DATA LOADING ---
+        // Check if user is logged in, redirect if not
+        const SUPABASE_URL = 'https://havsuikahafqciurmaeq.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let userProfile = null;
+        let userEmail = null;
+
+        function loadUserData() {
+            // Try sessionStorage first, then localStorage
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+            
+            if (sessionProfile) {
+                userProfile = JSON.parse(sessionProfile);
+                userEmail = sessionStorage.getItem('userEmail') || userProfile.userEmail || '';
+            } else if (localProfile) {
+                userProfile = JSON.parse(localProfile);
+                userEmail = localStorage.getItem('userEmail') || userProfile.userEmail || '';
+                // Restore to sessionStorage for current session
+                sessionStorage.setItem('userProfile', localProfile);
+                sessionStorage.setItem('userEmail', userEmail);
+            } else {
+                // No user data found, redirect to login
+                window.location.href = "index.html";
+                return;
+            }
+
+            // Store user data in hidden element for easy access
+            const storageDiv = document.getElementById('user-data-storage');
+            storageDiv.setAttribute('data-profile', JSON.stringify(userProfile));
+            storageDiv.setAttribute('data-email', userEmail);
+
+            // Update sidebar with user information
+            updateSidebar();
+        }
+
+        async function verifyUserInSupabase() {
+            if (!userEmail) {
+                window.location.href = "index.html";
+                return false;
+            }
+            const { data, error } = await supabaseClient
+                .from('Applicants')
+                .select('email')
+                .eq('email', userEmail)
+                .maybeSingle();
+            if (error || !data) {
+                window.location.href = "index.html";
+                return false;
+            }
+            sessionStorage.setItem('userRole', 'applicant');
+            localStorage.setItem('userRole', 'applicant');
+            return true;
+        }
+
+        const MAINTENANCE_ADMIN_EMAILS = ['avpaner@up.edu.ph', 'pnrjr.abl@gmail.com'];
+
+
+        function normalizeSettingTitle(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function isMaintenanceAdmin(email) {
+            if (!email) return false;
+            return MAINTENANCE_ADMIN_EMAILS.includes(email.toLowerCase());
+        }
+
+        async function checkMaintenanceSetting() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('Setting')
+                    .select('Settingtitle, Number');
+                if (error || !data) return;
+                const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
+                const isEnabled = setting && Number(setting['Number']) === 1;
+                const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+                const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
+                document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
+            } catch (err) {
+                console.warn('Maintenance check failed', err);
+            }
+        }
+
+        function updateSidebar() {
+            if (!userProfile) return;
+
+            const fullName = userProfile.userName || 'User';
+            const initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+            
+            // Update desktop sidebar
+            const desktopAvatar = document.querySelector('.sidebar-profile .avatar');
+            const desktopName = document.querySelector('.sidebar-profile .user-name');
+            const desktopRole = document.querySelector('.sidebar-profile .user-role');
+            
+            if (desktopAvatar) desktopAvatar.innerText = initials;
+            if (desktopName) desktopName.innerText = fullName;
+            if (desktopRole) desktopRole.innerText = 'Applicant';
+
+            // Update mobile header
+            const mobileAvatar = document.querySelector('.mobile-header .m-avatar');
+            if (mobileAvatar) mobileAvatar.innerText = initials;
+        }
+
+        // Load user data on page load
+        function slugify(text) {
+            return text.toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        }
+
+        function resolveIframe(iframe, category) {
+            if (iframe === 'home.html') {
+                return category === 'Applicant' ? 'home_a.html' : 'home_r.html';
+            }
+            return iframe;
+        }
+
+        async function loadMenu() {
+            const navItems = document.getElementById('nav-items');
+            const mobileNav = document.getElementById('mobile-nav');
+            const mainContent = document.getElementById('main-content');
+
+            navItems.innerHTML = '';
+            mobileNav.innerHTML = '';
+            mainContent.innerHTML = '';
+
+            let menuItems = [];
+            try {
+                const { data, error } = await supabaseClient
+                    .from('Menu')
+                    .select('menuname, iframe, category, rank, emoji')
+                    .eq('category', 'Applicant');
+                if (error) throw error;
+                menuItems = (data || []).sort((a, b) => (Number(a.rank) || 0) - (Number(b.rank) || 0));
+            } catch (err) {
+                menuItems = [
+                    { menuname: 'Homepage', iframe: 'home.html', category: 'Applicant' },
+                    { menuname: 'Calendar', iframe: 'calendar.html', category: 'Applicant' },
+                    { menuname: 'Schedule', iframe: 'schedule_booking.html', category: 'Applicant' },
+                    { menuname: 'Requests', iframe: 'notifications.html', category: 'Applicant' }
+                ];
+            }
+
+            if (menuItems.length === 0) return;
+
+            menuItems.forEach((item, index) => {
+                const displayName = item.menuname && item.menuname.toLowerCase().includes('notification')
+                    ? 'Requests'
+                    : (item.menuname || 'Menu');
+                const emojiMarkup = item.emoji ? `<span class="nav-icon">${item.emoji}</span>` : '';
+                const mobileEmojiMarkup = item.emoji ? `<span class="m-nav-icon">${item.emoji}</span>` : '';
+                const viewId = `${slugify(displayName)}-${index}`;
+                const iframeSrc = resolveIframe(item.iframe || 'home.html', 'Applicant');
+
+                const navItem = document.createElement('div');
+                navItem.className = `nav-item${index === 0 ? ' active' : ''}`;
+                navItem.id = `d-${viewId}`;
+                navItem.onclick = () => show(viewId);
+                navItem.innerHTML = `<span class="nav-content">${emojiMarkup}<span class="nav-label">${displayName}</span></span>`;
+                navItems.appendChild(navItem);
+
+                const mobileBtn = document.createElement('div');
+                mobileBtn.className = `m-nav-btn${index === 0 ? ' active' : ''}`;
+                mobileBtn.id = `m-${viewId}`;
+                mobileBtn.onclick = () => show(viewId);
+                mobileBtn.innerHTML = `${mobileEmojiMarkup}<span class="m-nav-label">${displayName}</span>`;
+                mobileNav.appendChild(mobileBtn);
+
+                const view = document.createElement('div');
+                view.id = `view-${viewId}`;
+                view.className = `view${index === 0 ? ' active' : ''}`;
+                view.innerHTML = `<iframe src="${iframeSrc}" data-view="${viewId}" allow="clipboard-read; clipboard-write; fullscreen" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+                mainContent.appendChild(view);
+            });
+
+            attachIframeLoaders();
+            const firstIframe = document.querySelector('.view.active iframe');
+            if (firstIframe && firstIframe.dataset.loaded !== 'true') {
+                document.getElementById('iframe-loader').classList.add('active');
+            }
+        }
+
+        function attachIframeLoaders() {
+            const loader = document.getElementById('iframe-loader');
+            document.querySelectorAll('iframe').forEach(iframe => {
+                iframe.addEventListener('load', () => {
+                    iframe.dataset.loaded = 'true';
+                    if (iframe.closest('.view')?.classList.contains('active')) {
+                        loader.classList.remove('active');
+                    }
+                });
+            });
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem('userProfile');
+            sessionStorage.removeItem('userRole');
+            sessionStorage.removeItem('userEmail');
+            localStorage.removeItem('userProfile');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('userEmail');
+            window.location.href = 'index.html';
+        }
+
+        function navigateToProfile() {
+            const profileIframe = Array.from(document.querySelectorAll('iframe')).find((iframe) => iframe.src.includes('profile.html'));
+            if (profileIframe && profileIframe.dataset.view) {
+                show(profileIframe.dataset.view);
+                return;
+            }
+            window.location.href = 'profile.html';
+        }
+
+        function setupDesktopProfileMenu() {
+            const trigger = document.getElementById('desktopProfileTrigger');
+            const menu = document.getElementById('desktopProfileMenu');
+            if (!trigger || !menu) return;
+
+            const toggleMenu = (event) => {
+                event.stopPropagation();
+                menu.classList.toggle('show');
+            };
+
+            trigger.addEventListener('click', toggleMenu);
+            trigger.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggleMenu(event);
+                }
+            });
+
+            menu.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const action = event.target?.dataset?.action;
+                if (action === 'logout') {
+                    handleLogout();
+                } else if (action === 'profile') {
+                    navigateToProfile();
+                }
+                menu.classList.remove('show');
+            });
+
+            document.addEventListener('click', () => {
+                menu.classList.remove('show');
+            });
+        }
+
+        function setupMobileProfileMenu() {
+            const avatar = document.getElementById('mobileAvatar');
+            const menu = document.getElementById('mobileProfileMenu');
+            if (!avatar || !menu) return;
+            avatar.addEventListener('click', (event) => {
+                event.stopPropagation();
+                menu.classList.toggle('show');
+            });
+            menu.addEventListener('click', (event) => {
+                const action = event.target?.dataset?.action;
+                if (action === 'logout') {
+                    handleLogout();
+                } else if (action === 'profile') {
+                    navigateToProfile();
+                }
+                menu.classList.remove('show');
+            });
+            document.addEventListener('click', () => {
+                menu.classList.remove('show');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserData();
+            verifyUserInSupabase();
+            loadMenu();
+            checkMaintenanceSetting();
+            setupDesktopProfileMenu();
+            setupMobileProfileMenu();
+            setInterval(verifyUserInSupabase, 30000);
+        });
+
+        // Helper function to get user data anytime
+        function getUserData() {
+            return {
+                profile: userProfile,
+                email: userEmail,
+                getField: (fieldName) => userProfile ? (userProfile[fieldName] || localStorage.getItem(`user_${fieldName}`) || '') : ''
+            };
+        }
+
+        function show(id) {
+            const loader = document.getElementById('iframe-loader');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-item, .m-nav-btn').forEach(n => n.classList.remove('active'));
+
+            const view = document.getElementById('view-' + id);
+            const desktop = document.getElementById('d-' + id);
+            const mobile = document.getElementById('m-' + id);
+
+            if (view) view.classList.add('active');
+            if (desktop) desktop.classList.add('active');
+            if (mobile) mobile.classList.add('active');
+
+            const iframe = view ? view.querySelector('iframe') : null;
+            if (iframe && iframe.dataset.loaded !== 'true') {
+                loader.classList.add('active');
+            } else {
+                loader.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Applicant Appointment Portal | UPLB AMIS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root { 
+            --primary: #531C79; --border: #E2E8F0; --text: #1E293B;
+            --free-bg: #F3E5F5; --pending: #94A3B8; --approved: #531C79;
+            --declined: #AD1457; --completed: #2FB344;
+            --title-size: clamp(32px, 6vw, 50px);
+            --time-col-width: 80px;
+        }
+
+        body { font-family: 'Inter', sans-serif; background: #F8FAFC; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; color: var(--text); -webkit-font-smoothing: antialiased; }
+
+        .app-title { color: var(--primary); font-size: var(--title-size); font-weight: 900; text-align: center; margin: 0; letter-spacing: -2px; text-transform: uppercase; }
+        .title-band { background: #F1F5F9; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 22px 0 18px; }
+
+        /* Filter & Card Section */
+        .filter-panel { background: white; border-bottom: 1px solid var(--border); z-index: 100; }
+        .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; }
+        .panel-controls { display: flex; align-items: center; gap: 8px; }
+        .counter-pill { border: 1px solid var(--border); background: #fff; color: var(--primary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+        .panel-title { font-size: 11px; font-weight: 900; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; }
+        .collapse-toggle { border: 1px solid var(--border); background: #fff; color: var(--primary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
+        .filter-container { background: white; padding: 18px 20px; border-top: 1px solid var(--border); }
+        .filter-panel.collapsed .filter-container { display: none; }
+        .filter-grid { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 1200px; margin: 0 auto; }
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-group label { font-size: 12px; font-weight: 900; color: var(--primary); text-transform: uppercase; margin-bottom: 2px; }
+        .radio-group { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+        .radio-option { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #334155; text-transform: none; }
+        .radio-option input { accent-color: var(--primary); }
+        #resident-selection { margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--primary); display: none; }
+        
+        select { padding: 14px 16px; border: 2px solid var(--border); border-radius: 20px; background: #fff; font-size: 14px; outline: none; transition: 0.2s; color: #0F172A; }
+        select:focus { border-color: var(--primary); background: white; }
+        select:disabled { color: #94A3B8; background: #F8FAFC; }
+
+        /* Resident Cards */
+        #resident-card-container { display: none; margin-top: 15px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; padding: 5px 0 10px; gap: 12px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .res-card { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; width: max-content; min-width: max-content; max-width: none; background: white; border: 2px solid var(--border); border-radius: 10px; padding: 8px 12px; cursor: pointer; transition: 0.2s; vertical-align: top; box-sizing: border-box; }
+        .res-card.active { border-color: var(--primary); background: #F3E5F5; transform: scale(1.05); }
+        .res-card span { font-size: 11px; font-weight: 800; white-space: nowrap; text-align: center; line-height: 1.25; overflow: visible; text-overflow: clip; width: auto; }
+        .res-card .res-role { font-size: 10px; font-weight: 900; letter-spacing: 0.03em; color: var(--primary); margin-top: 4px; text-transform: uppercase; line-height: 1.15; white-space: nowrap; overflow: visible; text-overflow: clip; width: auto; }
+        .res-card.no-subtitle { justify-content: center; }
+
+        /* Grid */
+        #action-bar { background: var(--primary); color: white; padding: 12px 25px; display: none; align-items: center; justify-content: space-between; z-index: 101; }
+        .table-container { flex-grow: 1; overflow: auto; background: white; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+        table { width: 100%; border-collapse: separate; border-spacing: 3px; min-width: 850px; table-layout: fixed; }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 8px 0;
+            font-size: 13px;
+            font-weight: 900;
+            color: var(--primary);
+            border-bottom: none;
+            z-index: 10;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        thead th:not(:first-child),
+        tbody td:not(:first-child) {
+            width: calc((100% - var(--time-col-width)) / 7);
+        }
+
+        thead th:not(:first-child):hover {
+            background: #F3E5F5;
+            color: var(--primary);
+        }
+
+        .time-col {
+            position: sticky;
+            left: 0;
+            background: #FFFFFF;
+            z-index: 11;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--primary);
+            padding: 0 4px !important;
+            line-height: 1.35;
+            white-space: nowrap;
+            box-sizing: border-box;
+            width: var(--time-col-width);
+            min-width: var(--time-col-width);
+            max-width: var(--time-col-width);
+        }
+
+        .time-start {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .time-end {
+            display: block;
+            font-size: 10px;
+            color: #64748b;
+            margin-top: -1px;
+        }
+
+        td { padding: 0; border-bottom: none; }
+
+        .slot {
+            width: 100%;
+            min-height: 45px;
+            height: 45px;
+            background: #FAFAFA;
+            border-radius: 4px;
+            border: 1px solid #EDF2F7;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 6px;
+            align-content: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 500;
+            box-sizing: border-box;
+            transition: 0.1s;
+            cursor: default;
+            position: relative;
+            touch-action: pan-x pan-y;
+        }
+        .slot.available { background: var(--free-bg) !important; border-color: #EDF2F7; color: var(--primary); cursor: pointer; }
+        .slot.status-pending { background: var(--pending) !important; color: white; }
+        .slot.status-approved { background: var(--approved) !important; color: white; }
+        .slot.status-declined { background: var(--declined) !important; color: white; }
+        .slot.status-completed { background: var(--completed) !important; color: white; }
+        .slot.unavailable { background: transparent; border: 1px solid #F1F5F9; color: transparent; pointer-events: none; }
+        .slot.highlight-strict { outline: 3px solid var(--primary); transform: scale(0.96); z-index: 2; box-shadow: 0 0 10px rgba(83, 28, 121, 0.4); }
+        .slot-counter { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.95); color: var(--primary); border: 1px solid #D8B4FE; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; }
+
+        /* Modal & Toast */
+        #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 999; backdrop-filter: blur(4px); }
+        #booking-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; border-radius: 20px; z-index: 1000; width: 90%; max-width: 380px; }
+        #toast {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translate(-50%, -12px);
+            background: linear-gradient(135deg, #531C79, #BE4AAD);
+            color: white;
+            padding: 12px 22px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            display: block;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10000;
+            box-shadow: 0 12px 30px rgba(83, 28, 121, 0.35);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+        .btn-act { padding: 10px 16px; border-radius: 8px; font-weight: 800; border: none; cursor: pointer; font-size: 12px; }
+
+        @media (min-width: 641px) and (max-width: 1024px) and (orientation: portrait) {
+            .slot { min-height: 85px; height: 85px; }
+            :root { --time-col-width: 75px; }
+            .time-start { font-size: 12px; }
+        }
+
+        @media (max-width: 640px) {
+            body { overflow: auto; }
+            .panel-header { flex-direction: column; align-items: stretch; gap: 6px; }
+            .panel-controls { justify-content: flex-end; flex-wrap: wrap; }
+            .table-container { overflow: auto; }
+            table { min-width: 0; width: 100%; border-spacing: 1px; }
+            thead th { font-size: 9px; padding: 4px 0; }
+            :root { --time-col-width: 48px; }
+            .time-col { font-size: 9px; padding: 0 2px !important; }
+            .time-start { font-size: 9px; line-height: 1.1; }
+            .time-end { font-size: 7px; }
+            td { padding: 0; }
+            .slot { height: auto; min-height: 0; aspect-ratio: 1 / 1; padding: 0; gap: 0; border-radius: 2px; font-size: 0; color: transparent !important; }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="title-band">
+        <h1 class="app-title">SCHEDULE</h1>
+    </div>
+
+    <div class="filter-panel" id="filterPanel">
+        <div class="panel-header">
+            <span class="panel-title">Filters</span>
+            <div class="panel-controls">
+                <span class="counter-pill" id="requestsSentCounter">Requests Sent: 0</span>
+                <span class="counter-pill" id="quotaCounter">Quota: 0/0</span>
+                <button class="collapse-toggle" id="filterToggleBtn" onclick="toggleFilterPanel()">Hide</button>
+            </div>
+        </div>
+        <div class="filter-container">
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label>Filter by</label>
+                    <div class="radio-group">
+                        <label class="radio-option"><input type="radio" name="filterType" value="classification" onchange="onFilterTypeChange()"> Classification</label>
+                        <label class="radio-option"><input type="radio" name="filterType" value="committee" onchange="onFilterTypeChange()"> Committee</label>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label id="sel-filter-label">Select Filter</label>
+                    <select id="sel-class" onchange="onClassChange()" disabled><option value="">Select Classification or Committee first</option></select>
+                </div>
+            </div>
+            <div id="resident-card-container"></div>
+            <div id="resident-selection"></div>
+        </div>
+    </div>
+
+    <div id="action-bar">
+        <div id="action-msg" style="font-weight: 800; font-size: 13px;">Status</div>
+        <div id="action-btns"></div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr><th>TIME SLOT</th><th>SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th></tr>
+            </thead>
+            <tbody id="grid-body"></tbody>
+        </table>
+    </div>
+
+    <div id="modal-overlay" onclick="closeModal()"></div>
+    <div id="booking-modal">
+        <h3 style="margin:0; color:var(--primary)">Book Appointment</h3>
+        <p id="slot-info" style="font-size:12px; color:#64748B; margin:8px 0 15px 0; font-weight: 600;"></p>
+        <button id="facebook-btn" onclick="openResidentFacebook()" style="width:100%; padding:12px; border-radius:10px; border:none; background:#1877F2; color:white; font-weight:800; cursor:pointer;">Open Resident Facebook</button>
+        <p style="font-size:12px; color:#475569; margin:12px 0 0; line-height:1.45; font-weight:500;">When sending a Facebook Messenger notification to a resident, you should first greet them politely, then introduce yourself by stating your full name and your role as an applicant to the organization. After the introduction, clearly notify the resident that a reporting appointment has been scheduled by you through the website. The message should remain professional, polite, and concise, while giving the resident the opportunity to ask questions or confirm the schedule.</p>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button onclick="closeModal()" style="flex:1; padding:12px; border-radius:10px; border:none; background:#F1F5F9; font-weight:700;">Cancel</button>
+            <button onclick="confirmBooking()" style="flex:1; padding:12px; border-radius:10px; border:none; background:var(--primary); color:white; font-weight:700;">Send Request</button>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        // --- CONFIG & STATE ---
+        const firebaseConfig = { apiKey: "AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo", databaseURL: "https://uppss-26c6f-default-rtdb.firebaseio.com" };
+        const supabaseUrl = 'https://havsuikahafqciurmaeq.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhdnN1aWthaGFmcWNpdXJtYWVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgzNzI4MzQsImV4cCI6MjA4Mzk0ODgzNH0.6DvwXLA38zD5guKnzNj6cFha83mJktmZsoRhG-t63JA';
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+        const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const TIME_SLOTS = [
+            {s:'7:00 AM', e:'7:30 AM'}, {s:'7:30 AM', e:'8:00 AM'}, {s:'8:00 AM', e:'8:30 AM'}, {s:'8:30 AM', e:'9:00 AM'},
+            {s:'9:00 AM', e:'9:30 AM'}, {s:'9:30 AM', e:'10:00 AM'}, {s:'10:00 AM', e:'10:30 AM'}, {s:'10:30 AM', e:'11:00 AM'},
+            {s:'11:00 AM', e:'11:30 AM'}, {s:'11:30 AM', e:'12:00 PM'}, {s:'12:00 PM', e:'12:30 PM'}, {s:'12:30 PM', e:'1:00 PM'}, {s:'1:00 PM', e:'1:30 PM'}, {s:'1:30 PM', e:'2:00 PM'},
+            {s:'2:00 PM', e:'2:30 PM'}, {s:'2:30 PM', e:'3:00 PM'}, {s:'3:00 PM', e:'3:30 PM'}, {s:'3:30 PM', e:'4:00 PM'},
+            {s:'4:00 PM', e:'4:30 PM'}, {s:'4:30 PM', e:'5:00 PM'}, {s:'5:00 PM', e:'5:30 PM'}, {s:'5:30 PM', e:'6:00 PM'},
+            {s:'6:00 PM', e:'6:30 PM'}, {s:'6:30 PM', e:'7:00 PM'}, {s:'7:00 PM', e:'7:30 PM'}, {s:'7:30 PM', e:'8:00 PM'}
+        ];
+
+        let residents = [], settings = {}, selectedRes = null, activeReq = null, durationHours = 0.5, selectedSlotIds = [];
+        let currentUser = "";
+        let currentScheduleRef = null;
+        let currentRequestsRef = null;
+        let currentAvailableSlots = [];
+        let currentAllRequests = {};
+        let applicantQuota = 3;
+
+        function detachResidentListeners() {
+            if (currentScheduleRef) {
+                currentScheduleRef.off();
+                currentScheduleRef = null;
+            }
+            if (currentRequestsRef) {
+                currentRequestsRef.off();
+                currentRequestsRef = null;
+            }
+        }
+
+        function clearGridToBlank() {
+            activeReq = null;
+            selectedSlotIds = [];
+            document.getElementById('action-bar').style.display = 'none';
+            updateCounters({});
+
+            document.querySelectorAll('.slot').forEach(el => {
+                el.className = 'slot unavailable';
+                el.innerHTML = '';
+            });
+        }
+
+        function extractUserNameFromProfile(profile) {
+            if (!profile || typeof profile !== 'object') return '';
+            return profile.userName || profile.full_name || profile.fullName || profile.name || '';
+        }
+
+        function extractUserClassification(profile) {
+            if (!profile || typeof profile !== 'object') return '';
+            return profile.classification || profile.user_classification || profile.role || '';
+        }
+
+        function getProfileFromDashboardContext() {
+            try {
+                const storageNode = window.parent?.document?.getElementById('user-data-storage');
+                const rawProfile = storageNode?.getAttribute('data-profile');
+                if (!rawProfile) return null;
+                return JSON.parse(rawProfile);
+            } catch (e) {
+                console.warn('Unable to read user profile from dashboard context.', e);
+                return null;
+            }
+        }
+
+        function getLoggedInUserName() {
+            const dashboardProfile = getProfileFromDashboardContext();
+            const fromDashboard = extractUserNameFromProfile(dashboardProfile);
+            if (fromDashboard) return fromDashboard;
+
+            const profileCandidates = [
+                sessionStorage.getItem('userProfile'),
+                localStorage.getItem('userProfile'),
+                window.parent?.sessionStorage?.getItem('userProfile'),
+                window.parent?.localStorage?.getItem('userProfile')
+            ];
+
+            for (const profileRaw of profileCandidates) {
+                if (!profileRaw) continue;
+                try {
+                    const fromProfile = extractUserNameFromProfile(JSON.parse(profileRaw));
+                    if (fromProfile) return fromProfile;
+                } catch (e) {
+                    console.warn('Unable to parse user profile from storage.', e);
+                }
+            }
+
+            return sessionStorage.getItem('userName') || localStorage.getItem('userName') || 'User';
+        }
+
+        function getLoggedInUserClassification() {
+            const dashboardProfile = getProfileFromDashboardContext();
+            const fromDashboard = extractUserClassification(dashboardProfile);
+            if (fromDashboard) return fromDashboard;
+
+            const profileCandidates = [
+                sessionStorage.getItem('userProfile'),
+                localStorage.getItem('userProfile'),
+                window.parent?.sessionStorage?.getItem('userProfile'),
+                window.parent?.localStorage?.getItem('userProfile')
+            ];
+
+            for (const profileRaw of profileCandidates) {
+                if (!profileRaw) continue;
+                try {
+                    const fromProfile = extractUserClassification(JSON.parse(profileRaw));
+                    if (fromProfile) return fromProfile;
+                } catch (e) {
+                    console.warn('Unable to parse user profile classification from storage.', e);
+                }
+            }
+
+            return '';
+        }
+
+        function updateCounters(allRequests = currentAllRequests) {
+            const sentStatuses = new Set(['pending', 'approved', 'completed']);
+            const sentCount = Object.values(allRequests || {}).filter(req =>
+                req?.applicant_name === currentUser && sentStatuses.has((req.status || '').toLowerCase())
+            ).length;
+            document.getElementById('requestsSentCounter').textContent = `Requests Sent: ${sentCount}`;
+            document.getElementById('quotaCounter').textContent = `Quota: ${sentCount}/${applicantQuota}`;
+        }
+
+        function getResidentFacebookLink() {
+            if (!selectedRes) return '';
+            return selectedRes.facebook || selectedRes.facebook_link || selectedRes.facebookLink || selectedRes.fb_link || '';
+        }
+
+        function updateFacebookButtonState() {
+            const btn = document.getElementById('facebook-btn');
+            const link = getResidentFacebookLink();
+            const enabled = Boolean(link);
+            btn.disabled = !enabled;
+            btn.textContent = enabled ? 'Open Resident Facebook' : 'Facebook link unavailable';
+            btn.style.opacity = enabled ? '1' : '0.6';
+            btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        }
+
+        function openResidentFacebook() {
+            const link = getResidentFacebookLink();
+            if (!link) return toast('No Facebook link found for this resident.');
+            window.open(link, '_blank', 'noopener,noreferrer');
+        }
+
+        function resolveApplicantQuota() {
+            const classification = (getLoggedInUserClassification() || '').toString().trim().toLowerCase();
+            if (!classification) return 3;
+            const settingMatch = Object.entries(settings).find(([title]) => (title || '').toString().trim().toLowerCase() === classification);
+            const parsedQuota = settingMatch ? Number(settingMatch[1]) : NaN;
+            return Number.isFinite(parsedQuota) && parsedQuota > 0 ? parsedQuota : 3;
+        }
+
+        // --- INITIALIZATION ---
+        async function init() {
+            currentUser = getLoggedInUserName();
+            buildGrid();
+            clearGridToBlank();
+            const [{data: resData}, {data: setData}] = await Promise.all([
+                _supabase.from('Residents').select('*'),
+                _supabase.from('Setting').select('Settingtitle, Number') 
+            ]);
+            residents = resData || [];
+            setData?.forEach(s => settings[s.Settingtitle] = parseFloat(s.Number));
+            applicantQuota = resolveApplicantQuota();
+            updateCounters({});
+
+            onFilterTypeChange();
+        }
+
+        function buildGrid() {
+            let html = '';
+            TIME_SLOTS.forEach((slot, idx) => {
+                html += `<tr><td class="time-col"><span class="time-start">${slot.s}</span><span class="time-end">${slot.e}</span></td>`;
+                DAYS.forEach(day => {
+                    const slotId = `${day.toUpperCase()} - ${slot.s}`;
+                    html += `<td><div class="slot" id="${slotId}" data-idx="${idx}" data-day="${day}" onmouseover="handleHover('${slotId}')" onmouseout="clearHover()" onclick="handleSlotClick('${slotId}')"></div></td>`;
+                });
+                html += `</tr>`;
+            });
+            document.getElementById('grid-body').innerHTML = html;
+        }
+
+        // --- SELECTION LOGIC ---
+        function toggleFilterPanel() {
+            const panel = document.getElementById('filterPanel');
+            const toggleBtn = document.getElementById('filterToggleBtn');
+            const isCollapsed = panel.classList.toggle('collapsed');
+            toggleBtn.textContent = isCollapsed ? 'Show' : 'Hide';
+            toggleBtn.setAttribute('aria-expanded', (!isCollapsed).toString());
+        }
+
+        function getActiveFilterType() {
+            const checked = document.querySelector('input[name="filterType"]:checked');
+            return checked ? checked.value : '';
+        }
+
+        function getCommitteeValue(resident) {
+            return resident.committee || resident.Committee || resident.committee_name || resident.committeeName || '';
+        }
+
+        function onFilterTypeChange() {
+            const filterType = getActiveFilterType();
+            const selectEl = document.getElementById('sel-class');
+            const labelEl = document.getElementById('sel-filter-label');
+            const residentSelection = document.getElementById('resident-selection');
+
+            detachResidentListeners();
+            selectedRes = null;
+            currentAvailableSlots = [];
+            currentAllRequests = {};
+            clearGridToBlank();
+            updateCounters({});
+            document.getElementById('resident-card-container').innerHTML = '';
+            document.getElementById('resident-card-container').style.display = 'none';
+            residentSelection.style.display = 'none';
+            residentSelection.textContent = '';
+
+            const labelText = filterType === 'committee' ? 'Committee' : 'Classification';
+            labelEl.textContent = `Select ${labelText}`;
+
+            if (!filterType) {
+                selectEl.disabled = true;
+                selectEl.innerHTML = '<option value="">Select Classification or Committee first</option>';
+                return;
+            }
+
+            const values = [...new Set(residents
+                .map(r => filterType === 'committee' ? getCommitteeValue(r) : (r.classification || ''))
+                .filter(Boolean)
+            )].sort((a, b) => a.localeCompare(b));
+
+            selectEl.disabled = false;
+            selectEl.innerHTML = `<option value="">Choose ${labelText}...</option>` +
+                values.map(v => `<option value="${v}">${v}</option>`).join('');
+        }
+
+        function onClassChange() {
+            const cls = document.getElementById('sel-class').value;
+            const filterType = getActiveFilterType();
+            const container = document.getElementById('resident-card-container');
+            const residentSelection = document.getElementById('resident-selection');
+            detachResidentListeners();
+            selectedRes = null;
+            currentAvailableSlots = [];
+            currentAllRequests = {};
+            clearGridToBlank();
+            updateCounters({});
+            container.innerHTML = '';
+            residentSelection.style.display = 'none';
+            residentSelection.textContent = '';
+
+            if (cls) {
+                container.style.display = 'flex';
+                const filtered = residents
+                    .filter(r => (filterType === 'committee' ? getCommitteeValue(r) : r.classification) === cls)
+                    .sort((a, b) => {
+                        if (filterType === 'classification' && cls === 'Resident') {
+                            return (a.full_name || '').localeCompare(b.full_name || '');
+                        }
+                        const positionRank = (position) => {
+                            if (position === 1 || position === '1') return 0;
+                            if (position === 2 || position === '2') return 1;
+                            return 2;
+                        };
+                        const rankDiff = positionRank(a.position) - positionRank(b.position);
+                        if (rankDiff !== 0) return rankDiff;
+                        return (a.full_name || '').localeCompare(b.full_name || '');
+                    });
+
+                filtered.forEach(r => {
+                    const committeeLabel = getCommitteeValue(r);
+                    const roleLabel = (r.position === 1 || r.position === '1')
+                        ? 'Head'
+                        : ((r.position === 2 || r.position === '2') ? 'Co-head' : '');
+                    const subLabel = (filterType === 'classification' && cls === 'Executive')
+                        ? committeeLabel
+                        : ((filterType === 'classification' && cls === 'Resident') ? '' : roleLabel);
+                    const cardClass = subLabel ? 'res-card' : 'res-card no-subtitle';
+                    container.innerHTML += `
+                        <div class="${cardClass}" id="card-${r.full_name.replace(/\s/g, '')}" onclick="selectResident('${r.full_name}')">
+                            <span>${r.full_name}</span>
+                            ${subLabel ? `<span class="res-role">${subLabel}</span>` : ''}
+                        </div>`;
+                });
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function selectResident(name) {
+            detachResidentListeners();
+            document.querySelectorAll('.res-card').forEach(c => c.classList.remove('active'));
+            document.getElementById(`card-${name.replace(/\s/g, '')}`).classList.add('active');
+            
+            selectedRes = residents.find(r => r.full_name === name);
+            durationHours = settings[`Hours_${selectedRes.classification}`] || 0.5;
+            currentAvailableSlots = [];
+            currentAllRequests = {};
+            clearGridToBlank();
+
+            const resKey = name.replace(/[.#$\[\]]/g, '_');
+            currentScheduleRef = db.ref(`schedules/${resKey}`);
+            currentRequestsRef = db.ref('requests');
+
+            currentScheduleRef.on('value', snap => {
+                currentAvailableSlots = (snap.val() || {}).available_slots || [];
+                renderGrid(currentAvailableSlots, currentAllRequests);
+            });
+
+            currentRequestsRef.on('value', reqSnap => {
+                currentAllRequests = reqSnap.val() || {};
+                renderGrid(currentAvailableSlots, currentAllRequests);
+            });
+        }
+
+        function isMobileView() {
+            return window.matchMedia('(max-width: 640px)').matches;
+        }
+
+        // --- GRID RENDERING ---
+        function renderGrid(available, allRequests) {
+            if (!selectedRes) {
+                clearGridToBlank();
+                return;
+            }
+            document.querySelectorAll('.slot').forEach(s => { s.className = 'slot'; s.innerHTML = ''; });
+            activeReq = null; document.getElementById('action-bar').style.display = 'none';
+
+            const statusMap = {};
+            const approvedCountMap = {};
+            Object.entries(allRequests).forEach(([id, req]) => {
+                const normalizedStatus = (req.status || '').toLowerCase();
+                if (req.resident === selectedRes.full_name) {
+                    if (normalizedStatus === 'cancelled') return;
+                    if (req.applicant_name === currentUser) { activeReq = { ...req, id }; updateActionBar(req); }
+                    (req.slot_ids || [req.slot_id]).forEach(sid => {
+                        statusMap[sid] = normalizedStatus;
+                        if (normalizedStatus === 'approved') approvedCountMap[sid] = (approvedCountMap[sid] || 0) + 1;
+                    });
+                }
+            });
+
+            updateCounters(allRequests);
+
+            document.querySelectorAll('.slot').forEach(el => {
+                const status = statusMap[el.id];
+                if (status) {
+                    el.classList.add(`status-${status}`);
+                    el.innerText = isMobileView() ? '' : status.toUpperCase();
+                } else {
+                    const raw = available.find(a => a.replace("(/)", "") === el.id);
+                    if (raw) {
+                        if (raw.includes("(/)")) el.classList.add('unavailable');
+                        else { el.classList.add('available'); el.innerText = ''; }
+                    } else el.classList.add('unavailable');
+                }
+
+                const acceptedCount = approvedCountMap[el.id] || 0;
+                if (acceptedCount > 0) {
+                    el.insertAdjacentHTML('beforeend', `<span class="slot-counter" title="Accepted applicants">${acceptedCount}</span>`);
+                }
+            });
+        }
+
+        function updateActionBar(req) {
+            const bar = document.getElementById('action-bar'), btns = document.getElementById('action-btns'), msg = document.getElementById('action-msg');
+            bar.style.display = 'flex';
+            if (req.status === 'completed') {
+                msg.innerText = "Appointment Completed ✅";
+                btns.innerHTML = `<span style="font-size:11px; font-weight:800; opacity:0.8;">SESSION ENDED</span>`;
+            } else if (req.status === 'approved') {
+                msg.innerText = "Appointment Approved!";
+                btns.innerHTML = `<button class="btn-act" style="background:white; color:var(--primary)" onclick="toast('Help: Rescheduling is admin-only')">HELP</button>`;
+            } else {
+                msg.innerText = "Status: " + req.status.toUpperCase();
+                btns.innerHTML = `<button class="btn-act" style="background:#FF5252; color:white" onclick="withdraw()">WITHDRAW</button>`;
+            }
+        }
+
+        // --- BOOKING ENGINE ---
+        function handleHover(id) {
+            if (durationHours < 1.0) return;
+            const el = document.getElementById(id);
+            if (!el?.classList.contains('available')) return;
+            const idx = parseInt(el.dataset.idx);
+            const nextSlot = TIME_SLOTS[idx + 1];
+            if (!nextSlot) return;
+            const nextEl = document.getElementById(`${el.dataset.day.toUpperCase()} - ${nextSlot.s}`);
+            if (nextEl?.classList.contains('available')) {
+                el.classList.add('highlight-strict');
+                nextEl.classList.add('highlight-strict');
+            }
+        }
+
+        function clearHover() { document.querySelectorAll('.highlight-strict').forEach(e => e.classList.remove('highlight-strict')); }
+
+        function handleSlotClick(id) {
+            if (activeReq) return toast("⚠️ You have an active request.");
+            const el = document.getElementById(id);
+            if (!el.classList.contains('available')) return;
+
+            let ids = [id];
+            if (durationHours >= 1.0) {
+                const idx = parseInt(el.dataset.idx);
+                const nextSlot = TIME_SLOTS[idx + 1];
+                const nextId = nextSlot ? `${el.dataset.day.toUpperCase()} - ${nextSlot.s}` : null;
+                const nextEl = nextId ? document.getElementById(nextId) : null;
+
+                if (!nextEl || !nextEl.classList.contains('available')) {
+                    alert(`❌ 1-hour booking (2 slots) required for ${selectedRes.classification}.`);
+                    return;
+                }
+                ids.push(nextId);
+                // Touch visual feedback
+                el.classList.add('highlight-strict'); nextEl.classList.add('highlight-strict');
+                setTimeout(clearHover, 600);
+            }
+
+            selectedSlotIds = ids;
+            document.getElementById('slot-info').innerText = `Time: ${ids.join(' & ')}`;
+            updateFacebookButtonState();
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('booking-modal').style.display = 'block';
+        }
+
+        async function confirmBooking() {
+            await db.ref('requests').push({
+                applicant_name: currentUser, resident: selectedRes.full_name,
+                status: 'pending', slot_id: selectedSlotIds[0], slot_ids: selectedSlotIds,
+                timestamp: Date.now()
+            });
+            closeModal(); toast("✅ Request Sent!");
+        }
+
+        async function withdraw() {
+            if (confirm("Withdraw this request?")) {
+                await db.ref(`requests/${activeReq.id}`).remove();
+                toast("Request Withdrawn.");
+            }
+        }
+
+        function closeModal() { document.getElementById('modal-overlay').style.display='none'; document.getElementById('booking-modal').style.display='none'; }
+        function toast(m) { const t=document.getElementById('toast'); t.innerText=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3500); }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>

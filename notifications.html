@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requests | Applicant Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --primary: #531C79;
+            --bg: #F8FAFC;
+            --border: #E2E8F0;
+            --text-sub: #64748b;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg); min-height: 100vh; color: #1e293b; padding: 30px; }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .page-title {
+            font-size: clamp(32px, 6vw, 50px);
+            font-weight: 900;
+            color: var(--primary);
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: -2px;
+        }
+
+        .notifications-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .notification-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .notification-card:hover {
+            box-shadow: 0 4px 12px rgba(83, 28, 121, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .notification-card.approved {
+            border-left: 4px solid var(--success);
+        }
+
+        .notification-card.declined {
+            border-left: 4px solid var(--error);
+        }
+
+        .notification-card.pending {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .notification-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        .notification-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-approved {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-declined {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .notification-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .notification-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 16px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-reschedule {
+            border: none;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: #531C79;
+            color: white;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+            box-shadow: 0 6px 16px rgba(83, 28, 121, 0.2);
+            transition: transform 0.2s ease;
+        }
+
+        .btn-reschedule:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-approve {
+            border: none;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: #10b981;
+            color: white;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+        }
+
+        .btn-decline {
+            border: none;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+        }
+
+        #toast {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translate(-50%, -12px);
+            padding: 12px 22px;
+            border-radius: 999px;
+            color: white;
+            font-weight: 700;
+            display: block;
+            z-index: 1000;
+            box-shadow: 0 12px 30px rgba(83, 28, 121, 0.35);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            background: linear-gradient(135deg, #531C79, #BE4AAD);
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        .maintenance-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            padding: 20px;
+        }
+
+        .maintenance-card {
+            background: white;
+            border-radius: 20px;
+            padding: 28px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+        }
+
+        .maintenance-card h2 {
+            color: var(--primary);
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+
+        .maintenance-card p {
+            color: var(--text-sub);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .detail-item {
+            font-size: 13px;
+        }
+
+        .detail-label {
+            font-weight: 700;
+            color: var(--text-sub);
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #1e293b;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .empty-state-text {
+            color: var(--text-sub);
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        #loader {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 700px) {
+            body { padding: 20px; }
+            .notification-card { padding: 16px; border-radius: 14px; }
+            .notification-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .notification-status { align-self: flex-start; }
+            .notification-details { grid-template-columns: 1fr; }
+            .detail-value { line-height: 1.45; word-break: break-word; }
+            .notification-actions { justify-content: stretch; }
+            .btn-reschedule { width: 100%; text-align: center; padding: 10px 14px; }
+            .page-title { text-align: center; }
+            .modal-card { padding: 18px; }
+            .modal-header { gap: 8px; align-items: flex-start; }
+            .modal-actions { justify-content: stretch; }
+            .modal-actions .btn-reschedule,
+            .modal-actions .btn-secondary { width: 100%; }
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            padding: 20px;
+        }
+
+        .modal-card {
+            background: white;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            padding: 24px;
+            width: 100%;
+            max-width: 520px;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .modal-details {
+            display: grid;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 18px;
+            gap: 10px;
+        }
+
+        .btn-secondary {
+            border: 1px solid var(--border);
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast"></div>
+    <div class="maintenance-overlay" id="maintenanceOverlay">
+        <div class="maintenance-card">
+            <h2>Website Under Maintenance</h2>
+            <p>The portal is currently under maintenance. Please check back later.</p>
+        </div>
+    </div>
+    <div class="container">
+        <h1 class="page-title">Requests</h1>
+
+        <div id="loader">
+            <div class="spinner"></div>
+            <p style="color: var(--text-sub); font-weight: 600;">Loading requests...</p>
+        </div>
+
+        <div id="notifications-container" class="notifications-list" style="display: none;">
+            <!-- Notifications will be inserted here -->
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="requestModal">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="requestModalTitle">
+            <div class="modal-header">
+                <div class="modal-title" id="requestModalTitle">Request Details</div>
+                <button class="btn-secondary" type="button" onclick="closeRequestModal()">Close</button>
+            </div>
+            <div id="requestModalStatus" class="notification-status"></div>
+            <div class="modal-details" id="requestModalDetails"></div>
+            <div class="modal-actions" id="requestModalActions"></div>
+        </div>
+    </div>
+
+    <script>
+        // Get user data
+        function getUserData() {
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+
+            if (sessionProfile) return JSON.parse(sessionProfile);
+            if (localProfile) return JSON.parse(localProfile);
+            return null;
+        }
+
+        const userProfile = getUserData();
+        const applicantName = userProfile ? (userProfile.userName || '') : '';
+        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+        const isResidentView = (userProfile && (userProfile.userClassification || '').toLowerCase().includes('resident')) || false;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo",
+            authDomain: "uppss-26c6f.firebaseapp.com",
+            databaseURL: "https://uppss-26c6f-default-rtdb.firebaseio.com",
+            projectId: "uppss-26c6f",
+            storageBucket: "uppss-26c6f.firebasestorage.app",
+            messagingSenderId: "734429390148",
+            appId: "1:734429390148:web:97b7cad461e5505943a311"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const supabaseClient = supabase.createClient(
+            'https://havsuikahafqciurmaeq.supabase.co',
+            'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C'
+        );
+        const residentDetailsCache = new Map();
+        const requestCache = new Map();
+
+        const MAINTENANCE_ADMIN_EMAILS = ['avpaner@up.edu.ph', 'pnrjr.abl@gmail.com'];
+
+
+        function normalizeSettingTitle(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function isMaintenanceAdmin(email) {
+            if (!email) return false;
+            return MAINTENANCE_ADMIN_EMAILS.includes(email.toLowerCase());
+        }
+
+        async function checkMaintenanceSetting() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('Setting')
+                    .select('Settingtitle, Number');
+                if (error || !data) return;
+                const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
+                const isEnabled = setting && Number(setting['Number']) === 1;
+                const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+                const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
+                document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
+            } catch (err) {
+                console.warn('Maintenance check failed', err);
+            }
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatSlotId(slotId) {
+            if (!slotId) return 'N/A';
+            if (Array.isArray(slotId)) {
+                return formatSlotRange(slotId);
+            }
+            if (typeof slotId !== 'string') return 'N/A';
+            const parts = getSlotParts(slotId);
+            if (!parts) return slotId;
+            return `${parts.day} | ${parts.start}`;
+        }
+
+        function formatSlotRange(slotIds) {
+            if (!slotIds.length) return 'N/A';
+            const normalized = [...slotIds].filter(Boolean);
+            if (normalized.length === 1) return formatSlotId(normalized[0]);
+            const firstParts = getSlotParts(normalized[0]);
+            const lastParts = getSlotParts(normalized[normalized.length - 1]);
+            if (firstParts && lastParts && firstParts.day === lastParts.day) {
+                return `${firstParts.day} | ${firstParts.start} - ${lastParts.end}`;
+            }
+            return normalized.map(formatSlotId).join(', ');
+        }
+
+        function getSlotParts(slotId) {
+            if (!slotId || typeof slotId !== 'string') return null;
+            const [day, time] = slotId.split('-');
+            if (!day || !time) return null;
+            const match = time.match(/(\\d{1,2})(\\d{2})(AM|PM)/i);
+            if (!match) return null;
+            const hour = Number(match[1]);
+            const minutes = Number(match[2]);
+            const period = match[3].toUpperCase();
+            const start = formatClockTime(hour, minutes, period);
+            const end = formatClockTime(...addMinutes(hour, minutes, period, 30));
+            return { day, start, end };
+        }
+
+        function addMinutes(hour, minutes, period, add) {
+            let totalHours = period === 'PM' && hour < 12 ? hour + 12 : period === 'AM' && hour === 12 ? 0 : hour;
+            let totalMinutes = totalHours * 60 + minutes + add;
+            totalMinutes = totalMinutes % (24 * 60);
+            const newHours24 = Math.floor(totalMinutes / 60);
+            const newMinutes = totalMinutes % 60;
+            const newPeriod = newHours24 >= 12 ? 'PM' : 'AM';
+            const displayHour = newHours24 % 12 === 0 ? 12 : newHours24 % 12;
+            return [displayHour, newMinutes, newPeriod];
+        }
+
+        function formatClockTime(hour, minutes, period) {
+            const paddedMinutes = String(minutes).padStart(2, '0');
+            return `${hour}:${paddedMinutes} ${period}`;
+        }
+
+        function getApplicantNote(request = {}) {
+            return request.note || request.applicant_note || request.request_note || '';
+        }
+
+        function formatResidentSlot(slotId) {
+            const firstSlot = Array.isArray(slotId) ? slotId[0] : slotId;
+            const parts = getSlotParts(firstSlot);
+            if (!parts) return 'N/A';
+            return `${parts.day.toUpperCase()} - ${parts.start}`;
+        }
+
+        function getApplicantFullName(request = {}) {
+            return request.applicant_full_name || request.applicant_name || request.applicant || 'N/A';
+        }
+
+        function renderNotification(data, id) {
+            const status = (data.status || 'pending').toLowerCase();
+            const statusClass = `status-${status}`;
+            const cardClass = `notification-card ${status}`;
+            const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
+            const canReschedule = status === 'pending' || status === 'approved';
+            const applicantNote = getApplicantNote(data);
+            const isResidentAssigned = isResidentView && (data.resident || '').trim() === applicantName.trim();
+            const selectedTime = formatResidentSlot(slotIds);
+
+            const html = `
+                <div class="${cardClass}">
+                    <div class="notification-header">
+                        <div class="notification-title">Appointment Request</div>
+                        <div class="notification-status ${statusClass}">${status}</div>
+                    </div>
+                    <div class="notification-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Applicant Full Name</div>
+                            <div class="detail-value">${getApplicantFullName(data)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Selected Time</div>
+                            <div class="detail-value">${selectedTime}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Resident</div>
+                            <div class="detail-value">${data.resident || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Applicant Note</div>
+                            <div class="detail-value">${applicantNote || 'None'}</div>
+                        </div>
+                    </div>
+                    ${isResidentAssigned && status === 'pending' ? `
+                    <div class="notification-actions">
+                        <button class="btn-decline" onclick="updateRequestStatus('${id}', 'declined')">✖ Decline</button>
+                        <button class="btn-approve" onclick="updateRequestStatus('${id}', 'approved')">✔ Approve</button>
+                    </div>
+                    ` : ''}
+                    ${canReschedule ? `
+                    <div class="notification-actions">
+                        <button class="btn-reschedule" onclick="startReschedule('${id}')">Reschedule</button>
+                    </div>
+                    ` : ''}
+                    <div class="notification-actions">
+                        <button class="btn-reschedule" onclick="openRequestDetails('${id}')">View Details</button>
+                    </div>
+                </div>
+            `;
+            return html;
+        }
+
+        async function getResidentDetails(residentName) {
+            if (!residentName) return null;
+            if (residentDetailsCache.has(residentName)) {
+                return residentDetailsCache.get(residentName);
+            }
+            try {
+                const { data } = await supabaseClient
+                    .from('Residents')
+                    .select('classification, Facebook')
+                    .eq('full_name', residentName)
+                    .maybeSingle();
+                const details = data ? { classification: data.classification || 'N/A', facebook: data.Facebook || 'N/A' } : null;
+                residentDetailsCache.set(residentName, details);
+                return details;
+            } catch (err) {
+                console.error('Error fetching resident details:', err);
+                return null;
+            }
+        }
+
+        async function openRequestDetails(requestId) {
+            const request = requestCache.get(requestId);
+            if (!request) return;
+            const status = (request.status || 'pending').toLowerCase();
+            const slotText = formatSlotRange(request.slot_ids || [request.slot_id].filter(Boolean));
+            const residentDetails = await getResidentDetails(request.resident);
+            const classification = residentDetails?.classification || 'N/A';
+            const facebook = residentDetails?.facebook || 'N/A';
+            const location = request.Location || request.requested_location || 'TBA';
+            const residentNote = request.resident_note || request.status_message || 'None';
+            const applicantNote = getApplicantNote(request) || 'None';
+
+            const statusBadge = document.getElementById('requestModalStatus');
+            statusBadge.className = `notification-status status-${status}`;
+            statusBadge.textContent = status;
+
+            const details = [
+                `<div><strong>Date & Time:</strong> ${slotText || 'TBA'}</div>`,
+                `<div><strong>Resident:</strong> ${request.resident || 'N/A'}</div>`,
+                `<div><strong>Classification:</strong> ${classification}</div>`,
+                `<div><strong>Facebook:</strong> ${facebook}</div>`,
+                `<div><strong>Applicant Note:</strong> ${applicantNote}</div>`
+            ];
+
+            if (status === 'approved') {
+                details.splice(1, 0, `<div><strong>Location:</strong> ${location || 'TBA'}</div>`);
+            } else {
+                details.splice(1, 0, `<div><strong>Resident Note:</strong> ${residentNote}</div>`);
+            }
+
+            document.getElementById('requestModalDetails').innerHTML = details.join('');
+            const actions = document.getElementById('requestModalActions');
+            actions.innerHTML = '';
+            if (status === 'declined') {
+                actions.innerHTML = `<button class="btn-reschedule" type="button" onclick="goToBooking('${request.resident || ''}')">Reapply to another schedule</button>`;
+            } else if (status === 'pending') {
+                actions.innerHTML = `<button class="btn-reschedule" type="button" onclick="goToBooking('${request.resident || ''}')">Change schedule</button>`;
+            }
+
+            document.getElementById('requestModal').style.display = 'flex';
+        }
+
+        function closeRequestModal() {
+            document.getElementById('requestModal').style.display = 'none';
+        }
+
+        function goToBooking(residentName) {
+            if (residentName) {
+                sessionStorage.setItem('focusResident', residentName);
+            }
+            window.location.href = 'grid_applis.html';
+        }
+
+        async function updateRequestStatus(requestId, status) {
+            try {
+                await db.ref(`requests/${requestId}`).update({
+                    status,
+                    reviewed_at: new Date().toISOString()
+                });
+                notify(status === 'approved' ? '✅ Request approved' : '❌ Request declined');
+            } catch (error) {
+                console.error('Failed to update request status', error);
+                notify('⚠️ Unable to update request status');
+            }
+        }
+
+        // Listen for requests
+        const requestsRef = db.ref('requests');
+        const requestQuery = applicantName
+            ? requestsRef.orderByChild('applicant_name').equalTo(applicantName)
+            : userEmail
+                ? requestsRef.orderByChild('applicant_email').equalTo(userEmail)
+                : requestsRef;
+
+        requestQuery.on('value', (snapshot) => {
+            const loader = document.getElementById('loader');
+            const container = document.getElementById('notifications-container');
+
+            loader.style.display = 'none';
+            container.style.display = 'flex';
+            container.innerHTML = '';
+            requestCache.clear();
+
+            const requests = snapshot.val() || {};
+            const userRequests = [];
+
+            // Filter requests for this applicant
+            Object.keys(requests).forEach(key => {
+                const req = requests[key];
+                const matchesName = (req.applicant_name || req.applicant) === applicantName;
+                const matchesEmail = req.applicant_email === userEmail;
+                if (matchesName || matchesEmail) {
+                    userRequests.push({ ...req, id: key });
+                }
+            });
+
+            if (userRequests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <div class="empty-state-text">No requests yet</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort by timestamp (newest first)
+            userRequests.sort((a, b) => {
+                const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return timeB - timeA;
+            });
+
+            userRequests.forEach(req => {
+                requestCache.set(req.id, req);
+                container.insertAdjacentHTML('beforeend', renderNotification(req, req.id));
+            });
+        });
+
+        checkMaintenanceSetting();
+
+        function notify(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        window.startReschedule = (requestId) => {
+            sessionStorage.setItem('rescheduleRequestId', requestId);
+            notify('Redirecting to reschedule...');
+            setTimeout(() => {
+                window.location.href = 'grid_applis.html';
+            }, 600);
+        };
+
+        window.openRequestDetails = openRequestDetails;
+        window.closeRequestModal = closeRequestModal;
+        window.goToBooking = goToBooking;
+        window.updateRequestStatus = updateRequestStatus;
+    </script>
+</body>
+</html>

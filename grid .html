@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UPLB AMIS Schedule Sync</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --primary: #531C79;
+            --border: #E2E8F0;
+            --text: #1E293B;
+            --free-bg: #F3E5F5;
+            --blocked-red: #BE4AAD;
+            --reschedule-green: #2FB344;
+            --initials-green: #49A631;
+            --glow-v: rgba(83, 28, 121, 0.4);
+            --glow-g: rgba(47, 179, 68, 0.35);
+            --time-col-width: 80px;
+        }
+        body { font-family: 'Inter', sans-serif; background: #F8FAFC; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: var(--text); -webkit-font-smoothing: antialiased; }
+
+        body.reschedule-mode-active { box-shadow: inset 0 0 0 8px var(--reschedule-green), 0 0 25px var(--glow-g); }
+
+        .title-band { background: #F1F5F9; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 22px 0 18px; }
+        .app-title { color: var(--primary); font-size: clamp(32px, 6vw, 50px); font-weight: 900; text-align: center; margin: 0; letter-spacing: -2px; text-transform: uppercase; }
+        .mode-banner { color: var(--primary); font-size: 12px; font-weight: 800; text-align: center; margin: 10px 0 0; display: none; letter-spacing: 0.2em; }
+        body.reschedule-mode-active .mode-banner { display: block; color: var(--reschedule-green); }
+        .table-container { flex-grow: 1; background: white; overflow: auto; width: 100%; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+        table { width: 100%; border-collapse: separate; border-spacing: 3px; min-width: 850px; table-layout: fixed; }
+
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 8px 0;
+            font-size: 13px;
+            font-weight: 900;
+            color: var(--primary);
+            border-bottom: none;
+            z-index: 10;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        thead th:not(:first-child),
+        tbody td:not(:first-child) {
+            width: calc((100% - var(--time-col-width)) / 7);
+        }
+
+        thead th:not(:first-child):hover {
+            background: #F3E5F5;
+            color: var(--primary);
+        }
+
+        .time-col {
+            position: sticky;
+            left: 0;
+            background: #FFFFFF;
+            z-index: 11;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--primary);
+            padding: 0 4px !important;
+            line-height: 1.35;
+            white-space: nowrap;
+            box-sizing: border-box;
+            width: var(--time-col-width);
+            min-width: var(--time-col-width);
+            max-width: var(--time-col-width);
+        }
+
+        .time-label {
+            display: block;
+        }
+
+        .time-start {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .time-end {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: -1px;
+        }
+
+        .time-separator {
+            display: inline-block;
+            margin: 0 4px;
+            color: #94a3b8;
+        }
+
+        td { padding: 0; border-bottom: none; }
+        .slot {
+            width: 100%;
+            min-height: 45px;
+            height: 45px;
+            background: #FAFAFA;
+            border-radius: 4px;
+            border: 1px solid #EDF2F7;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 6px;
+            align-content: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 500;
+            box-sizing: border-box;
+            transition: 0.1s;
+            position: relative;
+            touch-action: pan-x pan-y;
+        }
+        .slot.available { background: var(--free-bg) !important; border-color: #EDF2F7; color: var(--primary); cursor: pointer; }
+        .slot.locked { background: #FCE4EC !important; border-color: var(--blocked-red); cursor: pointer; }
+        .slot.source-selected { outline: 3px solid var(--reschedule-green); outline-offset: -3px; background: #ECFDF3 !important; }
+
+        body.edit-mode-active .slot.available,
+        body.edit-mode-active .slot.locked {
+            cursor: grab;
+        }
+
+        body.edit-mode-active .slot.available:active,
+        body.edit-mode-active .slot.locked:active {
+            cursor: grabbing;
+        }
+
+        .initials-badge { background: var(--initials-green) !important; color: white !important; font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; pointer-events: none; }
+        .location-tag { width: 100%; color: var(--primary); font-size: 9px; font-weight: 800; margin-top: 4px; border-top: 1px solid rgba(83, 28, 121, 0.1); padding-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .slot.drag-target { outline: 2px dashed var(--reschedule-green); outline-offset: -2px; }
+
+        #location-picker { position: fixed; background: white; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 20000; display: none; padding: 8px; min-width: 170px; max-height: 300px; overflow-y: auto; }
+        .loc-option { padding: 10px 14px; font-size: 13px; color: #334155; cursor: pointer; border-radius: 6px; font-weight: 600; transition: all 0.2s; }
+        .loc-option:hover { background: #F1F5F9; color: var(--primary); }
+
+        #confirm-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            z-index: 30000;
+            padding: 24px;
+            min-width: 320px;
+            max-width: 400px;
+        }
+
+        #confirm-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 29999;
+        }
+
+        #details-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+            z-index: 30001;
+            padding: 20px;
+            min-width: 300px;
+            max-width: 420px;
+        }
+
+        #details-dialog .dialog-message {
+            margin-bottom: 10px;
+        }
+
+        .dialog-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+
+        .dialog-message {
+            font-size: 14px;
+            color: #475569;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .dialog-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .dialog-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .dialog-btn-cancel {
+            background: #E2E8F0;
+            color: #475569;
+        }
+
+        .dialog-btn-cancel:hover {
+            background: #CBD5E1;
+        }
+
+        .dialog-btn-confirm {
+            background: #BE4AAD;
+            color: white;
+        }
+
+        .dialog-btn-confirm:hover {
+            background: #9C3C8D;
+        }
+
+        .toggle-lock-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: #334155;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .toggle-lock-indicator {
+            width: 34px;
+            height: 18px;
+            border-radius: 999px;
+            background: #cbd5e1;
+            position: relative;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .toggle-lock-indicator::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+            transition: left 0.2s;
+        }
+
+        .toggle-lock-btn.active {
+            border-color: var(--blocked-red);
+            color: var(--blocked-red);
+            background: #FDF2F8;
+        }
+
+        .toggle-lock-btn.active .toggle-lock-indicator {
+            background: var(--blocked-red);
+        }
+
+        .toggle-lock-btn.active .toggle-lock-indicator::after {
+            left: 18px;
+        }
+
+        .controls-bar {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .controls-panel {
+            border-bottom: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+        }
+
+        .panel-title {
+            font-size: 11px;
+            font-weight: 900;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .collapse-toggle {
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--primary);
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .controls-panel.collapsed #scheduleControls {
+            display: none;
+        }
+
+        .action-card {
+            border: 2px solid var(--border);
+            background: #fff;
+            color: var(--primary);
+            border-radius: 20px;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 900;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 150px;
+        }
+
+        .action-card:hover {
+            border-color: var(--primary);
+            background: #F3E5F5;
+            transform: translateY(-1px);
+        }
+
+        #reschedBtn.action-card.active {
+            background: #ECFDF3;
+            border-color: var(--reschedule-green);
+            color: var(--reschedule-green);
+        }
+
+        @media (min-width: 641px) and (max-width: 1024px) and (orientation: portrait) {
+            .slot { min-height: 85px; height: 85px; }
+            :root { --time-col-width: 75px; }
+            .time-start { font-size: 12px; }
+        }
+
+        @media (max-width: 640px) {
+            body { overflow: auto; }
+            .table-container { overflow: auto; }
+            table { min-width: 0; width: 100%; border-spacing: 1px; }
+            thead th { font-size: 9px; padding: 4px 0; }
+            :root { --time-col-width: 48px; }
+            .time-col { font-size: 9px; padding: 0 2px !important; }
+            .time-start { font-size: 9px; line-height: 1.1; }
+            .time-end { font-size: 7px; }
+            td { padding: 0; }
+            .slot { height: auto; min-height: 0; aspect-ratio: 1 / 1; padding: 0; gap: 0; border-radius: 2px; font-size: 0; }
+            .slot .initials-badge,
+            .slot .location-tag { display: none !important; }
+            .title-band { padding: 16px 0 14px; }
+            .controls-bar { padding: 12px; gap: 8px; flex-wrap: wrap; }
+            .panel-header { padding: 8px 12px; }
+            .action-card { min-width: 138px; }
+            #details-dialog { min-width: 85vw; }
+        }
+
+        #toast {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translate(-50%, -12px);
+            background: linear-gradient(135deg, #531C79, #BE4AAD);
+            color: white;
+            padding: 12px 22px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            display: block;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10000;
+            box-shadow: 0 12px 30px rgba(83, 28, 121, 0.35);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 25000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        #loading-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .loading-spinner {
+            width: 46px;
+            height: 46px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+
+        .loading-text {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .slot.missing-class {
+            background: #FEF3C7 !important;
+            border-color: #F59E0B;
+            box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.2);
+        }
+
+        #csv-upload, #json-upload { display: none; }
+
+        .maintenance-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 26000;
+            padding: 20px;
+        }
+
+        .maintenance-card {
+            background: white;
+            border-radius: 20px;
+            padding: 28px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+        }
+
+        .maintenance-card h2 {
+            color: var(--primary);
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+
+        .maintenance-card p {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body id="mainBody">
+
+    <div id="location-picker"></div>
+    <div class="maintenance-overlay" id="maintenanceOverlay">
+        <div class="maintenance-card">
+            <h2>Website Under Maintenance</h2>
+            <p>The portal is currently under maintenance. Please check back later.</p>
+        </div>
+    </div>
+    <div id="confirm-overlay"></div>
+    <div id="details-dialog">
+        <div class="dialog-title">Slot Details</div>
+        <div class="dialog-message" id="details-message">-</div>
+        <div class="dialog-actions">
+            <button class="dialog-btn dialog-btn-confirm" onclick="closeDetailsDialog()">Close</button>
+        </div>
+    </div>
+    <div id="confirm-dialog">
+        <div class="dialog-title" id="dialog-title">Confirm Action</div>
+        <div class="dialog-message" id="dialog-message">Are you sure?</div>
+        <div class="dialog-actions">
+            <button class="dialog-btn dialog-btn-cancel" onclick="closeDialog()">Cancel</button>
+            <button class="dialog-btn dialog-btn-confirm" id="dialog-confirm">Confirm</button>
+        </div>
+    </div>
+    <div class="title-band">
+        <h1 class="app-title">SCHEDULE</h1>
+        <div class="mode-banner" id="modeBanner">RESCHEDULE MODE</div>
+    </div>
+    <div id="toast"></div>
+    <div id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Processing schedule...</div>
+    </div>
+
+    <div class="controls-panel" id="controlsPanel">
+        <div class="panel-header">
+            <span class="panel-title">Actions</span>
+            <button class="collapse-toggle" id="controlsToggleBtn" onclick="toggleControlsPanel()">Hide</button>
+        </div>
+        <div class="controls-bar" id="scheduleControls">
+            <button class="action-card" onclick="toggleEditMode()" id="editBtn">✍️ Edit Mode</button>
+            <button class="action-card" onclick="triggerCSVUpload()">📄 Upload CSV</button>
+            <button class="action-card" onclick="toggleRescheduleMode()" id="reschedBtn">🔄 Reschedule</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>TIME SLOT</th>
+                    <th onclick="handleDayClick('Sunday')">SUN</th>
+                    <th onclick="handleDayClick('Monday')">MON</th>
+                    <th onclick="handleDayClick('Tuesday')">TUE</th>
+                    <th onclick="handleDayClick('Wednesday')">WED</th>
+                    <th onclick="handleDayClick('Thursday')">THU</th>
+                    <th onclick="handleDayClick('Friday')">FRI</th>
+                    <th onclick="handleDayClick('Saturday')">SAT</th>
+                </tr>
+            </thead>
+            <tbody id="grid"></tbody>
+        </table>
+    </div>
+
+    <input type="file" id="csv-upload" accept=".csv" onchange="handleCSVUpload(event)">
+
+    <script>
+        // Get current user name from stored data
+        function getCurrentUserName() {
+            // Try sessionStorage first, then localStorage
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+
+            let userProfile = null;
+            if (sessionProfile) {
+                userProfile = JSON.parse(sessionProfile);
+            } else if (localProfile) {
+                userProfile = JSON.parse(localProfile);
+            }
+
+            if (userProfile) {
+                return userProfile.userName || 'Resident';
+            }
+
+            // Fallback
+            return "Juan";
+        }
+
+        function toFirebaseKey(value) {
+            return (value || '').replace(/[.#$\[\]]/g, '_');
+        }
+
+        // Comprehensive user profile access function
+        function getUserProfile() {
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+            const userProfile = sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
+
+            if (!userProfile) {
+                return {
+                    userName: 'Guest',
+                    userEmail: '',
+                    userClassification: '',
+                    userCommittee: '',
+                    userPic: '',
+                    userFB: ''
+                };
+            }
+
+            return {
+                userName: userProfile.userName || 'Guest',
+                userEmail: userProfile.userEmail || '',
+                userClassification: userProfile.userClassification || '',
+                userCommittee: userProfile.userCommittee || '',
+                userPic: userProfile.userPic || '',
+                userFB: userProfile.userFB || ''
+            };
+        }
+
+        // Access individual profile variables
+        const { userName, userEmail, userClassification, userCommittee, userPic, userFB } = getUserProfile();
+
+        const CURRENT_USER_NAME = getCurrentUserName();
+        const CURRENT_USER_KEY = toFirebaseKey(CURRENT_USER_NAME);
+        let isEditMode = false, isRescheduleMode = false, selectedSourceId = null, slotLimit = 3;
+        let userSchedule = [], allRequests = {}, locationChoices = [], activeSlotForLoc = null;
+        let manualLockedSlots = new Set();
+        let localScheduleState = {};
+        let isDragging = false, dragStartSlot = null, dragHasMoved = false, dragIgnoreClick = false;
+        let longPressTimer = null, pointerDownSlot = null, draggedTargetSlot = null, pointerDownAt = 0;
+        let longPressTriggered = false;
+        const LONG_PRESS_MS = 260;
+        let saveTimer = null;
+        let hasUnsavedChanges = false;
+        let suppressAvailableHighlight = false;
+        let missingClassSlots = new Set();
+        let USER_QUOTA = 3;
+        let isQuotaLoaded = false;
+        let lastScheduleSnap = null;
+
+        function toggleControlsPanel() {
+            const panel = document.getElementById('controlsPanel');
+            const toggleBtn = document.getElementById('controlsToggleBtn');
+            const isCollapsed = panel.classList.toggle('collapsed');
+            toggleBtn.textContent = isCollapsed ? 'Show' : 'Hide';
+            toggleBtn.setAttribute('aria-expanded', (!isCollapsed).toString());
+        }
+
+        firebase.initializeApp({ apiKey: "AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo", databaseURL: "https://uppss-26c6f-default-rtdb.firebaseio.com" });
+        const db = firebase.database();
+        const supabaseClient = supabase.createClient('https://havsuikahafqciurmaeq.supabase.co', 'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C');
+        const MAINTENANCE_ADMIN_EMAILS = ['avpaner@up.edu.ph', 'pnrjr.abl@gmail.com'];
+        db.ref(`schedules/${CURRENT_USER_KEY}/display_name`).set(CURRENT_USER_NAME);
+
+
+        function normalizeSettingTitle(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function isMaintenanceAdmin(email) {
+            if (!email) return false;
+            return MAINTENANCE_ADMIN_EMAILS.includes(email.toLowerCase());
+        }
+
+        async function checkMaintenanceSetting() {
+            try {
+                const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
+                if (error || !data) return;
+                const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
+                const isEnabled = setting && Number(setting['Number']) === 1;
+                const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+                const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
+                document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
+            } catch (err) {
+                console.warn('Maintenance check failed', err);
+            }
+        }
+
+        async function fetchLocations() {
+            const { data, error } = await supabaseClient.from('Locations').select('locations');
+            if (data) {
+                locationChoices = data.map(i => i.locations).filter(l => l);
+                console.log("Locations loaded:", locationChoices);
+            }
+        }
+
+        async function getCurrentUserClassification() {
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+            const userProfile = sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
+            if (!userProfile) {
+                return null;
+            }
+
+            const storedClassification = userProfile.userClassification || userProfile.classification;
+            if (storedClassification) {
+                return storedClassification;
+            }
+
+            const email = userProfile.userEmail || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+            if (!email) {
+                return null;
+            }
+
+            const { data, error } = await supabaseClient
+                .from('Residents')
+                .select('classification')
+                .eq('email', email)
+                .maybeSingle();
+            if (error) {
+                console.warn('Failed to load user classification', error);
+                return null;
+            }
+            if (data && data.classification) {
+                const updatedProfile = { ...userProfile, userClassification: data.classification };
+                if (sessionProfile) {
+                    sessionStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+                } else {
+                    localStorage.setItem('userProfile', JSON.stringify(updatedProfile));
+                }
+                return data.classification;
+            }
+            return null;
+        }
+
+        function normalizeClassification(value) {
+            if (!value) return '';
+            return value.toString().trim().toLowerCase();
+        }
+
+        async function fetchUserQuota() {
+            const classification = await getCurrentUserClassification();
+            if (!classification) {
+                console.warn('No user classification found. Falling back to default quota:', USER_QUOTA);
+                isQuotaLoaded = true;
+                return;
+            }
+            const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
+            if (error || !data) {
+                console.warn('Failed to load user quota', error);
+                isQuotaLoaded = true;
+                return;
+            }
+            const normalizedClassification = normalizeClassification(classification);
+            const match = data.find(row => {
+                const settingTitle = row['Setting title'] || row['Settingtitle'];
+                return normalizeClassification(settingTitle) === normalizedClassification;
+            });
+            if (match && match['Number'] !== undefined && match['Number'] !== null) {
+                const quota = Number(match['Number']);
+                if (!Number.isNaN(quota) && quota > 0) {
+                    USER_QUOTA = quota;
+                    slotLimit = USER_QUOTA;
+                } else {
+                    console.warn('Invalid quota value for classification. Using default quota:', classification, match['Number']);
+                }
+            } else {
+                console.warn('No quota configuration found for classification. Using default quota:', classification, USER_QUOTA);
+            }
+
+            isQuotaLoaded = true;
+        }
+
+        const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const TIME_SLOTS = [
+            {start: '7:00 AM', end: '7:30 AM', id: '700AM'},
+            {start: '7:30 AM', end: '8:00 AM', id: '730AM'},
+            {start: '8:00 AM', end: '8:30 AM', id: '800AM'},
+            {start: '8:30 AM', end: '9:00 AM', id: '830AM'},
+            {start: '9:00 AM', end: '9:30 AM', id: '900AM'},
+            {start: '9:30 AM', end: '10:00 AM', id: '930AM'},
+            {start: '10:00 AM', end: '10:30 AM', id: '1000AM'},
+            {start: '10:30 AM', end: '11:00 AM', id: '1030AM'},
+            {start: '11:00 AM', end: '11:30 AM', id: '1100AM'},
+            {start: '11:30 AM', end: '12:00 PM', id: '1130AM'},
+            {start: '12:00 PM', end: '12:30 PM', id: '1200PM'},
+            {start: '12:30 PM', end: '1:00 PM', id: '1230PM'},
+            {start: '1:00 PM', end: '1:30 PM', id: '100PM'},
+            {start: '1:30 PM', end: '2:00 PM', id: '130PM'},
+            {start: '2:00 PM', end: '2:30 PM', id: '200PM'},
+            {start: '2:30 PM', end: '3:00 PM', id: '230PM'},
+            {start: '3:00 PM', end: '3:30 PM', id: '300PM'},
+            {start: '3:30 PM', end: '4:00 PM', id: '330PM'},
+            {start: '4:00 PM', end: '4:30 PM', id: '400PM'},
+            {start: '4:30 PM', end: '5:00 PM', id: '430PM'},
+            {start: '5:00 PM', end: '5:30 PM', id: '500PM'},
+            {start: '5:30 PM', end: '6:00 PM', id: '530PM'},
+            {start: '6:00 PM', end: '6:30 PM', id: '600PM'},
+            {start: '6:30 PM', end: '7:00 PM', id: '630PM'},
+            {start: '7:00 PM', end: '7:30 PM', id: '700PM'},
+            {start: '7:30 PM', end: '8:00 PM', id: '730PM'}
+        ];
+        const DAY_NAME_LOOKUP = DAYS.reduce((acc, day) => {
+            acc[day.toUpperCase()] = day;
+            return acc;
+        }, {});
+
+        function formatSlotForStorage(slotId) {
+            if (!slotId) return slotId;
+            const isLocked = slotId.includes("(/)");
+            const clean = slotId.replace("(/)", "");
+            const parts = clean.split('-');
+            if (parts.length < 2) return slotId;
+            const [day, timeKey] = parts;
+            const timeSlot = TIME_SLOTS.find(slot => slot.id === timeKey);
+            if (!timeSlot) return slotId;
+            const dayLabel = (DAY_NAME_LOOKUP[day.toUpperCase()] || day).toUpperCase();
+            const display = `${dayLabel} - ${timeSlot.start}`;
+            return isLocked ? `${display}(/)` : display;
+        }
+
+        function parseStoredSlotValue(value) {
+            if (!value) return value;
+            const isLocked = value.includes("(/)");
+            const clean = value.replace("(/)", "").trim();
+            if (clean.includes(' - ')) {
+                const [dayLabel, timeLabel] = clean.split(' - ').map(part => part.trim());
+                const dayName = DAY_NAME_LOOKUP[dayLabel.toUpperCase()] || dayLabel;
+                const slot = TIME_SLOTS.find(time => time.start.toUpperCase() === timeLabel.toUpperCase());
+                if (dayName && slot) {
+                    return `${dayName}-${slot.id}${isLocked ? "(/)" : ""}`;
+                }
+            }
+            return value;
+        }
+
+        function normalizeSlotId(slotId) {
+            if (!slotId) return '';
+            const parsed = parseStoredSlotValue(slotId);
+            const clean = (parsed || slotId).replace("(/)", "").trim();
+            if (clean.includes('-')) {
+                const [dayRaw, timeRaw] = clean.split('-');
+                const dayName = DAY_NAME_LOOKUP[(dayRaw || '').trim().toUpperCase()] || (dayRaw || '').trim();
+                const compactTime = (timeRaw || '').replace(/[:\s]/g, '').toUpperCase();
+                const knownSlot = TIME_SLOTS.find(slot => slot.id.toUpperCase() === compactTime);
+                if (dayName && knownSlot) {
+                    return `${dayName}-${knownSlot.id}`;
+                }
+            }
+            return clean.replace(/[:\s]/g, '');
+        }
+
+        function serializeAvailableSlots(slots) {
+            return slots.map(slotId => formatSlotForStorage(slotId));
+        }
+
+        function build() {
+            let h = '';
+
+            TIME_SLOTS.forEach(slot => {
+                h += `<tr><td class="time-col">
+                    <span class="time-label time-start">${slot.start}</span>
+                    <span class="time-label time-end">${slot.end}</span>
+                </td>`;
+                DAYS.forEach(day => {
+                    const fullId = `${day}-${slot.id}`;
+                    h += '<td><div class="slot" id="' + fullId + '" ' +
+                        'onclick="slotClick(event, this)" ' +
+                        'onmousedown="handleDragStart(event, this)" ' +
+                        'onmouseenter="handleDragEnter(event, this)" ' +
+                        'onmouseup="handleDragEnd(event)" ' +
+                        'onpointerdown="handlePointerDown(event, this)" ' +
+                        'onpointerenter="handlePointerEnter(event, this)" ' +
+                        'onpointerup="handlePointerUp(event, this)" ' +
+                        'onpointercancel="handlePointerCancel(event)"></div></td>';
+                });
+                h += `</tr>`;
+            });
+            document.getElementById('grid').innerHTML = h;
+        }
+
+        function handleDragStart(e, el) {
+            if (!isEditMode) return;
+            e.preventDefault(); // Prevent text selection
+            isDragging = true;
+            dragHasMoved = false;
+            dragIgnoreClick = true;
+            dragStartSlot = el;
+            if (!el.classList.contains('locked')) {
+                el.classList.toggle('available');
+                localScheduleState[el.id] = el.classList.contains('available');
+                markScheduleChanged();
+            }
+
+            // Prevent text selection during drag
+            document.body.style.userSelect = 'none';
+            document.body.style.webkitUserSelect = 'none';
+        }
+
+        function handleDragEnter(e, el) {
+            if (!isEditMode || !isDragging) return;
+            if (!el.classList.contains('locked')) {
+                // Match the state of the starting slot
+                if (dragStartSlot) {
+                    dragHasMoved = dragHasMoved || dragStartSlot !== el;
+                    const shouldBeAvailable = dragStartSlot.classList.contains('available');
+                    if (shouldBeAvailable) {
+                        el.classList.add('available');
+                    } else {
+                        el.classList.remove('available');
+                    }
+                    localScheduleState[el.id] = shouldBeAvailable;
+                    markScheduleChanged();
+                }
+            }
+        }
+
+        function handleDragEnd(e) {
+            if (!isEditMode) return;
+            isDragging = false;
+            dragStartSlot = null;
+            dragIgnoreClick = true;
+            // Re-enable text selection
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
+            setTimeout(() => {
+                dragIgnoreClick = false;
+            }, 0);
+        }
+
+        function clearPointerDragTarget() {
+            document.querySelectorAll('.slot.drag-target').forEach(s => s.classList.remove('drag-target'));
+        }
+
+        function clearLongPressTimer() {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        }
+
+        function handlePointerDown(e, el) {
+            if (!isRescheduleMode || !el.querySelector('.initials-badge')) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            pointerDownSlot = el;
+            draggedTargetSlot = null;
+            dragHasMoved = false;
+            longPressTriggered = false;
+            pointerDownAt = Date.now();
+            clearPointerDragTarget();
+            clearLongPressTimer();
+            longPressTimer = setTimeout(() => {
+                if (pointerDownSlot === el) {
+                    longPressTriggered = true;
+                    selectedSourceId = el.id;
+                    document.querySelectorAll('.slot').forEach(s => s.classList.remove('source-selected'));
+                    el.classList.add('source-selected');
+                    toast('👉 Drag and release on destination slot');
+                }
+            }, LONG_PRESS_MS);
+        }
+
+        function handlePointerEnter(e, el) {
+            if (!isRescheduleMode || !selectedSourceId || !pointerDownSlot) return;
+            if (el.id === selectedSourceId) return;
+            dragHasMoved = true;
+            draggedTargetSlot = el;
+            clearPointerDragTarget();
+            el.classList.add('drag-target');
+        }
+
+        async function handlePointerUp(e, el) {
+            if (!isRescheduleMode) return;
+            clearLongPressTimer();
+            const target = longPressTriggered ? (draggedTargetSlot || el) : null;
+            const source = pointerDownSlot;
+            pointerDownSlot = null;
+            dragHasMoved = false;
+            draggedTargetSlot = null;
+            clearPointerDragTarget();
+            if (longPressTriggered && selectedSourceId && source && target && target.id !== selectedSourceId) {
+                await handleRescheduleAction(target);
+                dragIgnoreClick = true;
+                setTimeout(() => { dragIgnoreClick = false; }, 0);
+            }
+            longPressTriggered = false;
+        }
+
+        function handlePointerCancel(e) {
+            clearLongPressTimer();
+            pointerDownSlot = null;
+            dragHasMoved = false;
+            draggedTargetSlot = null;
+            longPressTriggered = false;
+            clearPointerDragTarget();
+        }
+
+        // Add global mouseup to catch drag end anywhere
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                dragStartSlot = null;
+                dragIgnoreClick = true;
+                // Re-enable text selection
+                document.body.style.userSelect = '';
+                document.body.style.webkitUserSelect = '';
+                setTimeout(() => {
+                    dragIgnoreClick = false;
+                }, 0);
+            }
+            clearLongPressTimer();
+            pointerDownSlot = null;
+            draggedTargetSlot = null;
+            longPressTriggered = false;
+            clearPointerDragTarget();
+        });
+
+        function slotClick(e, el) {
+            if (isDragging || dragIgnoreClick) return; // Ignore clicks during drag
+
+            if (isRescheduleMode) {
+                if (el.querySelector('.initials-badge')) {
+                    showSlotDetails(el);
+                } else {
+                    toast('ℹ️ Tap approved slot to view details. Hold then drag to reschedule.');
+                }
+            } else if (isEditMode) {
+                manualLockedSlots.delete(el.id);
+                el.classList.toggle('available');
+                localScheduleState[el.id] = el.classList.contains('available');
+                markScheduleChanged();
+            } else {
+                showSlotDetails(el);
+            }
+        }
+
+        function handleDayClick(dayName) {
+            showConfirmDialog(
+                'Delete Week Schedule',
+                `Delete all availability schedule for <strong>${dayName}</strong>?`,
+                () => deleteDaySchedule(dayName)
+            );
+        }
+
+        function deleteDaySchedule(dayName) {
+            const slotsToRemove = userSchedule.filter(slot => {
+                const clean = slot.replace("(/)", "");
+                if (!clean.startsWith(`${dayName}-`)) {
+                    return false;
+                }
+                const cell = document.getElementById(clean);
+                return cell && cell.classList.contains('available');
+            });
+
+            const newSchedule = userSchedule.filter(slot => {
+                const clean = slot.replace("(/)", "");
+                if (!clean.startsWith(`${dayName}-`)) {
+                    return true;
+                }
+                const cell = document.getElementById(clean);
+                return !(cell && cell.classList.contains('available'));
+            });
+
+            db.ref(`schedules/${CURRENT_USER_KEY}/available_slots`).set(serializeAvailableSlots(newSchedule));
+            toast(`✅ Deleted ${slotsToRemove.length} slots for ${dayName}`);
+        }
+
+
+        function showSlotDetails(el) {
+            const cleanId = normalizeSlotId(el.id);
+            const entries = Object.entries(allRequests).map(([key, value]) => ({ key, req: normalizeRequest(value), raw: value })).filter(({ req }) =>
+                req.resident === CURRENT_USER_NAME &&
+                req.status === 'approved' &&
+                req.slotIds.some(slotId => normalizeSlotId(slotId) === cleanId)
+            );
+            const slotData = parseStoredSlotValue(cleanId) || cleanId;
+            const slotLocation = (lastScheduleSnap && lastScheduleSnap.val() && (lastScheduleSnap.val().locations || {})[slotData]) || '';
+            const [dayLabel, timeLabel] = slotData.split('-');
+            const applicantRows = entries.length
+                ? entries.map(({ key, req, raw }) => {
+                    const applicant = req.applicant || raw.applicant_name || 'Unknown applicant';
+                    const note = raw.resident_note || '';
+                    return `<div style="margin-bottom:10px;"><strong>${applicant}</strong><br><textarea data-request-key="${key}" class="slot-note" style="width:100%;min-height:52px;margin-top:6px;border:1px solid #E2E8F0;border-radius:8px;padding:8px;" placeholder="Add note for applicant">${note}</textarea></div>`;
+                }).join('')
+                : '<div>No approved applicants in this timeslot yet.</div>';
+
+            const isManuallyLocked = manualLockedSlots.has(slotData);
+            const isLocked = el.classList.contains('locked') || isManuallyLocked;
+            const locationOptions = [''].concat(locationChoices).map(loc => {
+                const selected = loc === slotLocation ? 'selected' : '';
+                const label = loc || 'No location assigned';
+                return `<option value="${loc}" ${selected}>${label}</option>`;
+            }).join('');
+            document.getElementById('details-message').innerHTML = `
+                <div><strong>Time:</strong> ${(dayLabel || '').toUpperCase()} - ${timeLabel || ''}</div>
+                ${isLocked ? `
+                <div style="margin-top:8px;"><strong>Location:</strong></div>
+                <select id="slot-location-select" style="width:100%;margin-top:6px;padding:8px;border:1px solid #E2E8F0;border-radius:8px;">${locationOptions}</select>
+                ` : '<div style="margin-top:8px;color:#64748b;font-size:12px;">Location can be assigned once this timeslot is locked.</div>'}
+                <div style="margin-top:10px;"><strong>Applicants:</strong></div>
+                <div style="margin-top:6px;">${applicantRows}</div>
+                <div class="dialog-actions" style="justify-content:space-between; margin-top:14px;">
+                    <button class="toggle-lock-btn ${isManuallyLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${slotData}')">
+                        <span>${isManuallyLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
+                        <span class="toggle-lock-indicator"></span>
+                    </button>
+                    <button class="dialog-btn dialog-btn-confirm" onclick="saveSlotDetails('${slotData}')">Save Details</button>
+                </div>
+            `;
+            document.getElementById('confirm-overlay').style.display = 'block';
+            document.getElementById('details-dialog').style.display = 'block';
+        }
+
+        async function saveSlotDetails(slotId) {
+            const locationField = document.getElementById('slot-location-select');
+            const locationValue = locationField ? locationField.value : null;
+            const updates = {};
+            document.querySelectorAll('.slot-note').forEach((field) => {
+                const key = field.getAttribute('data-request-key');
+                if (key) {
+                    updates[`requests/${key}/resident_note`] = field.value.trim();
+                }
+            });
+            if (Object.keys(updates).length) {
+                await db.ref().update(updates);
+            }
+            if (locationValue !== null) {
+                db.ref(`schedules/${CURRENT_USER_KEY}/locations/${slotId}`).set(locationValue);
+            }
+            toast('✅ Slot details updated');
+            closeDetailsDialog();
+        }
+
+        function toggleManualSlotLock(slotId) {
+            const slot = document.getElementById(slotId);
+            if (!slot) return;
+            if (manualLockedSlots.has(slotId)) {
+                manualLockedSlots.delete(slotId);
+                if (!slot.querySelector('.initials-badge')) {
+                    slot.classList.add('available');
+                    slot.classList.remove('locked');
+                }
+                toast('🔓 Slot unlocked');
+            } else {
+                manualLockedSlots.add(slotId);
+                slot.classList.remove('available');
+                slot.classList.add('locked');
+                toast('🔒 Slot locked');
+            }
+            markScheduleChanged();
+            saveData();
+            showSlotDetails(slot);
+        }
+
+        function closeDetailsDialog() {
+            document.getElementById('details-dialog').style.display = 'none';
+            document.getElementById('confirm-overlay').style.display = 'none';
+        }
+
+        function showConfirmDialog(title, message, onConfirm) {
+            document.getElementById('dialog-title').innerText = title;
+            document.getElementById('dialog-message').innerHTML = message;
+            document.getElementById('confirm-overlay').style.display = 'block';
+            document.getElementById('confirm-dialog').style.display = 'block';
+
+            const confirmBtn = document.getElementById('dialog-confirm');
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+            newConfirmBtn.onclick = () => {
+                onConfirm();
+                closeDialog();
+            };
+        }
+
+        function closeDialog() {
+            document.getElementById('confirm-overlay').style.display = 'none';
+            document.getElementById('confirm-dialog').style.display = 'none';
+        }
+
+        function showLocationPicker(e, slotId) {
+            activeSlotForLoc = slotId;
+            const picker = document.getElementById('location-picker');
+
+            const viewportHeight = window.innerHeight;
+            const estimatedHeight = Math.min(locationChoices.length * 40 + 100, 300);
+
+            let top = e.clientY;
+            if (top + estimatedHeight > viewportHeight) {
+                top = viewportHeight - estimatedHeight - 10;
+            }
+
+            picker.style.display = 'block';
+            picker.style.top = `${top}px`;
+            picker.style.left = `${e.clientX}px`;
+
+            let html = locationChoices.map(loc =>
+                `<div class="loc-option" onclick="applyLocation('${loc.replace(/'/g, "\\'")}')">${loc}</div>`
+            ).join('');
+            html += `<div class="loc-option" style="color:#EF4444; border-top:1px solid #eee; margin-top:5px;" onclick="applyLocation('')">❌ Clear</div>`;
+
+            picker.innerHTML = html;
+
+            setTimeout(() => {
+                const closeHandler = (evt) => {
+                    if (!picker.contains(evt.target)) {
+                        picker.style.display = 'none';
+                        document.removeEventListener('click', closeHandler);
+                    }
+                };
+                document.addEventListener('click', closeHandler);
+            }, 10);
+        }
+
+        async function applyLocation(loc) {
+            const updates = {};
+            Object.keys(allRequests).forEach(key => {
+                const req = normalizeRequest(allRequests[key]);
+                if (req.resident === CURRENT_USER_NAME && req.slotIds.some(slotId => normalizeSlotId(slotId) === normalizeSlotId(activeSlotForLoc)) && req.status === 'approved') {
+                    updates[`requests/${key}/Location`] = loc;
+                }
+            });
+            await db.ref().update(updates);
+            db.ref(`schedules/${CURRENT_USER_KEY}/locations/${activeSlotForLoc}`).set(loc);
+            toast(loc ? `📍 Assigned to ${loc}` : "❌ Location cleared");
+        }
+
+        async function handleRescheduleAction(el) {
+            if (!selectedSourceId) {
+                if (el.querySelector('.initials-badge')) {
+                    selectedSourceId = el.id;
+                    el.classList.add('source-selected');
+                    toast("👉 Pick destination slot");
+                }
+            } else {
+                const targetId = el.id;
+                const sourceClean = normalizeSlotId(selectedSourceId);
+                const moveEntries = Object.entries(allRequests).filter(([, value]) => {
+                    const req = normalizeRequest(value);
+                    return req.resident === CURRENT_USER_NAME
+                        && req.status === 'approved'
+                        && req.slotIds.some(slotId => normalizeSlotId(slotId) === sourceClean);
+                });
+
+                if (moveEntries.length > 0) {
+                    const updates = {};
+                    const sourceSlotIds = new Set();
+                    for (const [key, value] of moveEntries) {
+                        const req = normalizeRequest(value);
+                        req.slotIds.forEach(slotId => sourceSlotIds.add(normalizeSlotId(slotId)));
+                        const [day, timeKey] = targetId.split('-');
+                        const newSlotIds = getConsecutiveSlotIds(day, timeKey, req.slotIds.length || 1);
+                        if (!newSlotIds) {
+                            toast("⚠️ Cannot reschedule to that slot range.");
+                            return;
+                        }
+                        updates[`requests/${key}/slot_id`] = newSlotIds[0];
+                        updates[`requests/${key}/slot_ids`] = newSlotIds;
+                        updates[`requests/${key}/time_slot`] = newSlotIds[0];
+                    }
+
+                    // Always revert source slots to purple (available) state
+                    const newSchedule = userSchedule.map(s => {
+                        const clean = s.replace("(/)", "");
+                        if (sourceSlotIds.has(clean)) {
+                            return s.replace("(/)", "");
+                        }
+                        return s;
+                    });
+
+                    // Update schedule to revert source slots
+                    updates[`schedules/${CURRENT_USER_KEY}/available_slots`] = serializeAvailableSlots(newSchedule);
+
+                    await db.ref().update(updates);
+                    toggleRescheduleMode();
+                    toast("✅ Rescheduled successfully!");
+                }
+            }
+        }
+
+        function getConsecutiveSlotIds(day, timeKey, count) {
+            const index = TIME_SLOTS.findIndex(slot => slot.id === timeKey);
+            if (index === -1) return null;
+            const down = [];
+            for (let i = 0; i < count; i++) {
+                const idx = index + i;
+                if (idx >= TIME_SLOTS.length) {
+                    down.length = 0;
+                    break;
+                }
+                down.push(`${day}-${TIME_SLOTS[idx].id}`);
+            }
+            if (down.length === count) return down;
+            const up = [];
+            for (let i = count - 1; i >= 0; i--) {
+                const idx = index - i;
+                if (idx < 0) {
+                    up.length = 0;
+                    break;
+                }
+                up.push(`${day}-${TIME_SLOTS[idx].id}`);
+            }
+            return up.length === count ? up : null;
+        }
+
+        function toggleEditMode() {
+            if (isRescheduleMode) {
+                toast('❌ Exit reschedule mode first.');
+                return;
+            }
+            isEditMode = !isEditMode;
+            document.getElementById('mainBody').classList.toggle('edit-mode-active', isEditMode);
+            document.getElementById('editBtn').classList.toggle('active', isEditMode);
+            document.getElementById('editBtn').innerText = isEditMode ? '✅ Editing' : '✍️ Edit Mode';
+            toast(isEditMode ? '✍️ Edit mode enabled' : '👁️ View mode enabled');
+        }
+
+        function toggleRescheduleMode() {
+            isRescheduleMode = !isRescheduleMode;
+            if (isRescheduleMode) {
+                isEditMode = false;
+            }
+            document.getElementById('mainBody').classList.toggle('reschedule-mode-active', isRescheduleMode);
+            document.getElementById('mainBody').classList.toggle('edit-mode-active', isEditMode && !isRescheduleMode);
+            document.getElementById('reschedBtn').innerText = isRescheduleMode ? "❌ Cancel" : "🔄 Reschedule";
+            document.getElementById('reschedBtn').classList.toggle('active', isRescheduleMode);
+            document.getElementById('editBtn').classList.toggle('active', isEditMode && !isRescheduleMode);
+            document.getElementById('editBtn').innerText = isEditMode && !isRescheduleMode ? '✅ Editing' : '✍️ Edit Mode';
+            document.getElementById('modeBanner').style.display = isRescheduleMode ? 'block' : 'none';
+            selectedSourceId = null;
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('source-selected'));
+            closeMenu();
+        }
+
+        function saveData() {
+            if (!hasUnsavedChanges) {
+                return;
+            }
+            const slots = [];
+            document.querySelectorAll('.slot').forEach(s => {
+                if (manualLockedSlots.has(s.id)) {
+                    slots.push(s.id + "(/)");
+                } else if (s.classList.contains('available') || s.classList.contains('locked')) {
+                    slots.push(s.id);
+                }
+            });
+            db.ref(`schedules/${CURRENT_USER_KEY}/display_name`).set(CURRENT_USER_NAME);
+            db.ref(`schedules/${CURRENT_USER_KEY}/available_slots`).set(serializeAvailableSlots(slots));
+            localScheduleState = {};
+            hasUnsavedChanges = false;
+            if (saveTimer) {
+                clearTimeout(saveTimer);
+                saveTimer = null;
+            }
+            toast("💾 Schedule saved!");
+        }
+
+        function markScheduleChanged() {
+            hasUnsavedChanges = true;
+            suppressAvailableHighlight = false;
+            if (saveTimer) {
+                clearTimeout(saveTimer);
+                saveTimer = null;
+            }
+            saveTimer = setTimeout(() => {
+                saveData();
+            }, 1000);
+        }
+
+        function render(snap) {
+            lastScheduleSnap = snap;
+            const snapVal = snap.val() || {};
+            userSchedule = (snapVal.available_slots || []).map(parseStoredSlotValue);
+            manualLockedSlots = new Set((snapVal.available_slots || []).filter(slot => (slot || '').includes('(/)')).map(slot => parseStoredSlotValue(slot)));
+            const locs = snapVal.locations || {};
+
+            document.querySelectorAll('.slot').forEach(s => {
+                s.className = 'slot';
+                s.innerHTML = '';
+            });
+
+            const counts = {};
+
+            Object.values(allRequests).forEach(reqRaw => {
+                const req = normalizeRequest(reqRaw);
+                if (req.resident === CURRENT_USER_NAME && req.status === 'approved' && req.slotIds.length) {
+                    req.slotIds.forEach(slotId => {
+                        const id = normalizeSlotId(slotId);
+                        const cell = document.getElementById(id);
+                        if (cell) {
+                            counts[id] = (counts[id] || 0) + 1;
+                            const initials = req.applicant ? req.applicant.split(' ').map(n => n[0]).join('.') + '.' : 'N/A';
+                            cell.innerHTML += `<div class="initials-badge" data-label="${initials}">${initials}</div>`;
+                        }
+                    });
+                }
+            });
+
+            const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
+            const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
+
+            userSchedule.forEach(raw => {
+                const clean = raw.replace("(/)", "");
+                const el = document.getElementById(clean);
+                if (el) {
+                    const isLocked = manualLockedSlots.has(clean) || (counts[clean] >= activeQuota);
+                    if (isLocked) {
+                        el.classList.add('locked');
+                        if (locs[clean]) {
+                            el.innerHTML += `<div class="location-tag" data-label="${locs[clean]}">${locs[clean]}</div>`;
+                        }
+                    } else if (!suppressAvailableHighlight) {
+                        el.classList.add('available');
+                    }
+                }
+            });
+            missingClassSlots.forEach(slotId => {
+                const el = document.getElementById(slotId);
+                if (el) {
+                    el.classList.add('missing-class');
+                }
+            });
+            if (suppressAvailableHighlight) {
+                suppressAvailableHighlight = false;
+            }
+        }
+
+        function toggleMenu() {
+            // Deprecated after moving actions to static cards above the timetable.
+        }
+
+        function closeMenu() {
+            // Deprecated after moving actions to static cards above the timetable.
+        }
+
+        function triggerCSVUpload() {
+            document.getElementById('csv-upload').click();
+            closeMenu();
+        }
+
+        async function handleCSVUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            showLoading(true);
+            try {
+                const busySlots = await parseCSVSchedule(file);
+                const allSlots = Array.from(document.querySelectorAll('.slot')).map(slot => slot.id);
+                const busySet = new Set(busySlots);
+                const availableSlots = allSlots.filter(slotId => !busySet.has(slotId));
+
+                if (availableSlots.length === 0) {
+                    toast("⚠️ No available slots found outside the CSV schedule.");
+                    return;
+                }
+
+                missingClassSlots = new Set();
+                suppressAvailableHighlight = false;
+                db.ref(`schedules/${CURRENT_USER_KEY}/available_slots`).set(serializeAvailableSlots(availableSlots));
+                toast("📄 CSV processed! Available slots updated from schedule.");
+                closeMenu();
+            } finally {
+                showLoading(false);
+                e.target.value = '';
+            }
+        }
+
+        async function parseCSVSchedule(file) {
+            const text = await file.text();
+            const lines = text.split(/\r?\n/).filter(line => line.trim());
+            const busySlots = [];
+            lines.forEach((line, index) => {
+                const parts = parseCSVLine(line);
+                if (parts.length < 3) {
+                    return;
+                }
+                if (index === 0 && /day/i.test(parts[0])) {
+                    return;
+                }
+                const day = normalizeDay(parts[0]);
+                const { startMinutes, endMinutes } = correctTimeTyPos(parts[1], parts[2]);
+                if (!day || Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) {
+                    return;
+                }
+                const slotsForRow = getSlotsForRange(day, startMinutes, endMinutes);
+                slotsForRow.forEach(slotId => busySlots.push(slotId));
+            });
+            return Array.from(new Set(busySlots));
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i += 1) {
+                const char = line[i];
+                if (char === '"' && line[i + 1] === '"') {
+                    current += '"';
+                    i += 1;
+                } else if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        function normalizeDay(dayValue) {
+            if (!dayValue) return '';
+            const trimmed = dayValue.trim().toLowerCase();
+            const map = {
+                // Full names
+                'sunday': 'Sunday',
+                'monday': 'Monday',
+                'tuesday': 'Tuesday',
+                'wednesday': 'Wednesday',
+                'thursday': 'Thursday',
+                'friday': 'Friday',
+                'saturday': 'Saturday',
+                // Three-letter abbreviations
+                'sun': 'Sunday',
+                'mon': 'Monday',
+                'tue': 'Tuesday',
+                'tues': 'Tuesday',
+                'wed': 'Wednesday',
+                'thu': 'Thursday',
+                'thur': 'Thursday',
+                'thurs': 'Thursday',
+                'fri': 'Friday',
+                'sat': 'Saturday',
+                // Two-letter abbreviations
+                'su': 'Sunday',
+                'mo': 'Monday',
+                'tu': 'Tuesday',
+                'we': 'Wednesday',
+                'th': 'Thursday',
+                'fr': 'Friday',
+                'sa': 'Saturday',
+                // Single-letter abbreviations
+                'm': 'Monday',
+                't': 'Tuesday',
+                'w': 'Wednesday',
+                'f': 'Friday',
+                's': 'Saturday'
+            };
+
+            // Direct match first
+            if (map[trimmed]) return map[trimmed];
+
+            // Try first 3 characters
+            const short = trimmed.slice(0, 3);
+            if (map[short]) return map[short];
+
+            // Fallback to capitalized input
+            return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+        }
+
+        function parseTimeToMinutes(rawTime, isEndTime = false) {
+            if (!rawTime) return NaN;
+            const cleaned = rawTime.toString().trim().toUpperCase();
+            const match = cleaned.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/);
+            if (!match) return NaN;
+            let hours = Number(match[1]);
+            const minutes = Number(match[2] || '0');
+            let meridiem = match[3];
+
+            // Smart typo correction
+            if (!meridiem) {
+                // No AM/PM specified - infer based on hour
+                if (hours >= 8 && hours <= 11) {
+                    meridiem = 'AM'; // 8-11 are morning classes
+                } else if (hours === 7) {
+                    meridiem = isEndTime ? 'PM' : 'AM'; // 7 AM for start, 7 PM for end
+                } else if (hours === 12 || (hours >= 1 && hours <= 6)) {
+                    meridiem = 'PM'; // 12-6 are afternoon classes
+                } else {
+                    meridiem = 'AM'; // Default fallback
+                }
+            }
+
+            if (meridiem === 'PM' && hours < 12) hours += 12;
+            if (meridiem === 'AM' && hours === 12) hours = 0;
+            return hours * 60 + minutes;
+        }
+
+        function correctTimeTyPos(startTimeRaw, endTimeRaw) {
+            // Parse times with context awareness
+            const startMinutes = parseTimeToMinutes(startTimeRaw, false);
+            let endMinutes = parseTimeToMinutes(endTimeRaw, true);
+
+            // If end time is before start time (PM to AM typo), fix it
+            if (endMinutes < startMinutes) {
+                // Extract hour from end time and force it to PM
+                const cleaned = endTimeRaw.toString().trim().toUpperCase();
+                const match = cleaned.match(/(\d{1,2})(?::(\d{2}))?/);
+                if (match) {
+                    let hours = Number(match[1]);
+                    const minutes = Number(match[2] || '0');
+                    // Force PM conversion
+                    if (hours < 12) hours += 12;
+                    endMinutes = hours * 60 + minutes;
+                }
+            }
+
+            return { startMinutes, endMinutes };
+        }
+
+        function getSlotsForRange(day, startMinutes, endMinutes) {
+            const slots = [];
+            TIME_SLOTS.forEach(slot => {
+                const slotStart = parseTimeToMinutes(slot.start);
+                const slotEnd = parseTimeToMinutes(slot.end);
+                if (slotStart >= startMinutes && slotEnd <= endMinutes) {
+                    slots.push(normalizeSlotId(`${day}-${slot.id}`));
+                }
+            });
+            return slots;
+        }
+        function normalizeRequest(req) {
+            if (!req) return {};
+            const slotId = req.slot_id || req.slotId || req.Slot_ID || req.SlotId;
+            const slotIds = req.slot_ids || req.slotIds || req.Slot_IDs || req.SlotIds;
+            const normalizedSlotIds = Array.isArray(slotIds) && slotIds.length ? slotIds : (slotId ? [slotId] : []);
+            return {
+                resident: req.resident || req.Resident || req.RESIDENT,
+                status: req.status || req.Status || req.STATUS,
+                applicant: req.applicant_name || req.applicant || req.Applicant || req.APPLICANT,
+                slotId,
+                slotIds: normalizedSlotIds
+            };
+        }
+
+        function toast(msg) {
+            const el = document.getElementById('toast');
+            el.innerText = msg;
+            el.classList.add('show');
+            setTimeout(() => {
+                el.classList.remove('show');
+            }, 3000);
+        }
+
+        function showLoading(isLoading) {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.toggle('show', isLoading);
+        }
+
+        // Initialize
+        build();
+        fetchLocations();
+        checkMaintenanceSetting();
+        toast("👁️ View Mode: Click slots for details. Enable Edit Mode to change availability.");
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                saveData();
+            }
+        });
+
+        window.addEventListener('blur', () => {
+            saveData();
+        });
+
+        // Listen for schedule changes
+        db.ref(`schedules/${CURRENT_USER_KEY}`).on('value', (snap) => {
+            lastScheduleSnap = snap;
+            if (hasUnsavedChanges) return;
+            render(snap);
+        });
+
+        // Listen for request changes
+        db.ref('requests').on('value', (snap) => {
+            allRequests = snap.val() || {};
+            if (hasUnsavedChanges) return;
+            if (lastScheduleSnap) {
+                render(lastScheduleSnap);
+                return;
+            }
+            db.ref(`schedules/${CURRENT_USER_KEY}`).once('value').then(render);
+        });
+
+        fetchUserQuota()
+            .catch((error) => {
+                console.warn('Unexpected quota fetch error. Using default quota:', USER_QUOTA, error);
+            })
+            .finally(() => {
+                isQuotaLoaded = true;
+                db.ref(`schedules/${CURRENT_USER_KEY}`).once('value').then((snap) => {
+                    if (!snap.exists() && lastScheduleSnap) {
+                        render(lastScheduleSnap);
+                        return;
+                    }
+                    render(snap);
+                });
+            });
+
+    </script>
+</body>
+</html>
