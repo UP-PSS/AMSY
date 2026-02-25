@@ -804,7 +804,7 @@
         let isEditMode = false, isRescheduleMode = false, selectedSourceId = null, slotLimit = 3;
         let userSchedule = [], allRequests = {}, locationChoices = [], activeSlotForLoc = null;
         let manualLockedSlots = new Set();
-        let manualUnlockedSlots = new Set();
+        let autoLockedSlots = new Set();
         let localScheduleState = {};
         let isDragging = false, dragStartSlot = null, dragHasMoved = false, dragIgnoreClick = false;
         let longPressTimer = null, pointerDownSlot = null, draggedTargetSlot = null, pointerDownAt = 0;
@@ -819,6 +819,8 @@
         let lastScheduleSnap = null;
         let qrScannerInstance = null;
         let qrScannerRunning = false;
+        let lastApprovedCountsBySlot = {};
+        let hasInitializedApprovedCounts = false;
 
         function toggleControlsPanel() {
             const panel = document.getElementById('controlsPanel');
@@ -980,7 +982,7 @@
         function formatSlotForStorage(slotId) {
             if (!slotId) return slotId;
             const isLocked = slotId.includes("(/)");
-            const isUnlocked = slotId.includes("(u)");
+            const isAutoLocked = slotId.includes("(u)");
             const clean = slotId.replace("(/)", "").replace("(u)", "");
             const parts = clean.split('-');
             if (parts.length < 2) return slotId;
@@ -989,7 +991,7 @@
             if (!timeSlot) return slotId;
             const dayLabel = (DAY_NAME_LOOKUP[day.toUpperCase()] || day).toUpperCase();
             const display = `${dayLabel} - ${timeSlot.start}`;
-            return isLocked ? `${display}(/)` : isUnlocked ? `${display}(u)` : display;
+            return isLocked ? `${display}(/)` : isAutoLocked ? `${display}(u)` : display;
         }
 
         // Used only for comparison, not display or storage
@@ -1000,7 +1002,7 @@
         function parseStoredSlotValue(value) {
             if (!value) return value;
             const isLocked = value.includes("(/)");
-            const isUnlocked = value.includes("(u)");
+            const isAutoLocked = value.includes("(u)");
             const clean = value.replace("(/)", "").replace("(u)", "").trim();
             if (clean.includes(' - ')) {
                 const [dayLabel, timeLabel] = clean.split(' - ').map(part => part.trim());
@@ -1010,7 +1012,7 @@
                     compactTimeLabel(time.start).toUpperCase() === compactTimeLabel(timeLabel).toUpperCase()
                 );
                 if (dayName && slot) {
-                    return `${dayName}-${slot.id}${isLocked ? "(/)" : isUnlocked ? "(u)" : ""}`;
+                    return `${dayName}-${slot.id}${isLocked ? "(/)" : isAutoLocked ? "(u)" : ""}`;
                 }
             }
             return value;
@@ -1225,7 +1227,7 @@
                 // Locked slots cannot be toggled in edit mode — use the lock button in details
                 if (el.classList.contains('locked')) return;
                 manualLockedSlots.delete(el.id);
-                manualUnlockedSlots.delete(el.id);
+                autoLockedSlots.delete(el.id);
                 el.classList.toggle('available');
                 localScheduleState[el.id] = el.classList.contains('available');
                 markScheduleChanged();
@@ -1537,16 +1539,16 @@
             const isCurrentlyLocked = slot.classList.contains('locked') || manualLockedSlots.has(slotId);
 
             if (isCurrentlyLocked) {
-                // Force-unlock: remove from manual lock, add to manualUnlocked so quota won't re-lock it
+                // Fully unlock: clear both manual lock and auto-lock markers
                 manualLockedSlots.delete(slotId);
-                manualUnlockedSlots.add(slotId);
+                autoLockedSlots.delete(slotId);
                 slot.classList.remove('locked');
                 slot.classList.add('available');
                 toast('🔓 Slot unlocked');
             } else {
-                // Manual lock: add to manualLockedSlots, clear any force-unlock
+                // Manual lock takes precedence over quota lock markers
                 manualLockedSlots.add(slotId);
-                manualUnlockedSlots.delete(slotId);
+                autoLockedSlots.delete(slotId);
                 slot.classList.remove('available');
                 slot.classList.add('locked');
                 toast('🔒 Slot locked');
@@ -1759,7 +1761,7 @@
             document.querySelectorAll('.slot').forEach(s => {
                 if (manualLockedSlots.has(s.id)) {
                     slots.push(s.id + "(/)");
-                } else if (manualUnlockedSlots.has(s.id)) {
+                } else if (autoLockedSlots.has(s.id)) {
                     slots.push(s.id + "(u)");
                 } else if (s.classList.contains('available') || s.classList.contains('locked')) {
                     slots.push(s.id);
@@ -1797,6 +1799,34 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function normalizeTextValue(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+
+        function syncAutoLockedSlots(snapshotSlots, desiredAutoLockedSlots) {
+            if (hasUnsavedChanges) return;
+            const rawSlots = Array.isArray(snapshotSlots) ? snapshotSlots : [];
+            const normalizedSlots = rawSlots.map(parseStoredSlotValue);
+            const desiredSlots = normalizedSlots.map(slotId => {
+                const clean = slotId.replace("(/)", "").replace("(u)", "").trim();
+                if (manualLockedSlots.has(clean)) {
+                    return `${clean}(/)`;
+                }
+                if (desiredAutoLockedSlots.has(clean)) {
+                    return `${clean}(u)`;
+                }
+                return clean;
+            });
+
+            const changed = desiredSlots.length !== normalizedSlots.length
+                || desiredSlots.some((slot, index) => slot !== normalizedSlots[index]);
+
+            if (changed) {
+                db.ref(`schedules/${CURRENT_USER_KEY}/available_slots`).set(serializeAvailableSlots(desiredSlots));
+            }
+        }
+
         function render(snap) {
             lastScheduleSnap = snap;
             const snapVal = snap.val() || {};
@@ -1807,7 +1837,7 @@
                     .filter(slot => (slot || '').includes('(/)'))
                     .map(slot => parseStoredSlotValue(slot).replace('(/)', '').replace('(u)', '').trim())
             );
-            manualUnlockedSlots = new Set(
+            autoLockedSlots = new Set(
                 (snapVal.available_slots || [])
                     .filter(slot => (slot || '').includes('(u)'))
                     .map(slot => parseStoredSlotValue(slot).replace('(/)', '').replace('(u)', '').trim())
@@ -1821,10 +1851,14 @@
 
             const counts = {};
             const slotInitialsMap = {};
+            const normalizedCurrentResident = normalizeTextValue(CURRENT_USER_NAME);
 
             Object.values(allRequests).forEach(reqRaw => {
                 const req = normalizeRequest(reqRaw);
-                if (req.resident === CURRENT_USER_NAME && req.status === 'approved' && req.slotIds.length) {
+                const residentMatches = normalizeTextValue(req.resident) === normalizedCurrentResident;
+                const status = normalizeTextValue(req.status);
+                const isApproved = status === 'approved';
+                if (residentMatches && isApproved && req.slotIds.length) {
                     req.slotIds.forEach(slotId => {
                         const id = normalizeSlotId(slotId);
                         const cell = document.getElementById(id);
@@ -1851,14 +1885,32 @@
             const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
             const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
 
+            const newlyTriggeredAutoLocks = new Set();
+            const nextApprovedCountsBySlot = {};
+
+            userSchedule.forEach(raw => {
+                const clean = raw.replace("(/)", "").replace("(u)", "").trim();
+                const currentCount = counts[clean] || 0;
+                const previousCount = hasInitializedApprovedCounts
+                    ? (lastApprovedCountsBySlot[clean] || 0)
+                    : currentCount;
+                nextApprovedCountsBySlot[clean] = currentCount;
+
+                const crossedQuotaThreshold = previousCount === (activeQuota - 1) && currentCount === activeQuota;
+                if (crossedQuotaThreshold && !manualLockedSlots.has(clean)) {
+                    newlyTriggeredAutoLocks.add(clean);
+                }
+            });
+
+            const mergedAutoLockedSlots = new Set([...autoLockedSlots, ...newlyTriggeredAutoLocks]);
+
             userSchedule.forEach(raw => {
                 const clean = raw.replace("(/)", "").replace("(u)", "").trim();
                 const el = document.getElementById(clean);
                 if (el) {
                     const isManuallyLocked = manualLockedSlots.has(clean);
-                    const isManuallyUnlocked = manualUnlockedSlots.has(clean);
-                    const isQuotaLocked = !isManuallyUnlocked && (counts[clean] || 0) >= activeQuota;
-                    const isLocked = isManuallyLocked || isQuotaLocked;
+                    const isAutoLocked = mergedAutoLockedSlots.has(clean);
+                    const isLocked = isManuallyLocked || isAutoLocked;
                     if (isLocked) {
                         el.classList.add('locked');
                         if (locs[clean]) {
@@ -1869,6 +1921,11 @@
                     }
                 }
             });
+
+            autoLockedSlots = mergedAutoLockedSlots;
+            lastApprovedCountsBySlot = nextApprovedCountsBySlot;
+            hasInitializedApprovedCounts = true;
+            syncAutoLockedSlots(snapVal.available_slots || [], mergedAutoLockedSlots);
             missingClassSlots.forEach(slotId => {
                 const el = document.getElementById(slotId);
                 if (el) {
