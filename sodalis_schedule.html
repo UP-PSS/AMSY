@@ -9,6 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
         :root {
@@ -181,6 +182,90 @@
             padding: 20px;
             min-width: 300px;
             max-width: 420px;
+            width: min(92vw, 460px);
+        }
+
+        #qr-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+            z-index: 30002;
+            padding: 20px;
+            width: min(92vw, 460px);
+        }
+
+        #qr-reader {
+            width: 100%;
+            min-height: 260px;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #F8FAFC;
+        }
+
+        .details-meta {
+            display: grid;
+            gap: 10px;
+            padding: 12px;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            background: #F8FAFC;
+        }
+
+        .details-label {
+            font-size: 12px;
+            font-weight: 800;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 4px;
+        }
+
+        .details-value {
+            color: #0F172A;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .details-applicants {
+            margin-top: 12px;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            padding: 12px;
+            background: #fff;
+            max-height: 170px;
+            overflow-y: auto;
+        }
+
+        .details-applicant-item {
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #0F172A;
+        }
+
+        .details-notes {
+            margin-top: 12px;
+        }
+
+        .details-notes textarea,
+        #slot-location-select {
+            width: 100%;
+            margin-top: 6px;
+            padding: 10px;
+            border: 1px solid #CBD5E1;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            box-sizing: border-box;
         }
 
         #details-dialog .dialog-message {
@@ -503,6 +588,14 @@
         </div>
     </div>
     <div id="confirm-overlay"></div>
+    <div id="qr-dialog">
+        <div class="dialog-title">Scan QR Code</div>
+        <div class="dialog-message">Scan an applicant QR code with format <strong>https://t.ly/&lt;code&gt;</strong>.</div>
+        <div id="qr-reader"></div>
+        <div class="dialog-actions" style="margin-top:12px;">
+            <button class="dialog-btn dialog-btn-cancel" onclick="closeQrScanner()">Close</button>
+        </div>
+    </div>
     <div id="details-dialog">
         <div class="dialog-title">Slot Details</div>
         <div class="dialog-message" id="details-message">-</div>
@@ -537,6 +630,7 @@
             <button class="action-card" onclick="toggleEditMode()" id="editBtn">✍️ Edit Mode</button>
             <button class="action-card" onclick="triggerCSVUpload()">📄 Upload CSV</button>
             <button class="action-card" onclick="toggleRescheduleMode()" id="reschedBtn">🔄 Reschedule</button>
+            <button class="action-card" onclick="openQrScanner()">📷 Scan QR Code</button>
         </div>
     </div>
 
@@ -633,6 +727,8 @@
         let USER_QUOTA = 3;
         let isQuotaLoaded = false;
         let lastScheduleSnap = null;
+        let qrScannerInstance = null;
+        let qrScannerRunning = false;
 
         function toggleControlsPanel() {
             const panel = document.getElementById('controlsPanel');
@@ -1016,8 +1112,122 @@
                 localScheduleState[el.id] = el.classList.contains('available');
                 markScheduleChanged();
             } else {
+                const isGrayBusySlot = !el.classList.contains('available') && !el.classList.contains('locked') && !el.querySelector('.initials-badge');
+                if (isGrayBusySlot) {
+                    return;
+                }
                 showSlotDetails(el);
             }
+        }
+
+        async function openQrScanner() {
+            if (typeof Html5Qrcode === 'undefined') {
+                alert('QR scanner is unavailable in this browser.');
+                return;
+            }
+            document.getElementById('confirm-overlay').style.display = 'block';
+            document.getElementById('qr-dialog').style.display = 'block';
+            if (!qrScannerInstance) {
+                qrScannerInstance = new Html5Qrcode('qr-reader');
+            }
+            if (qrScannerRunning) {
+                return;
+            }
+            try {
+                await qrScannerInstance.start(
+                    { facingMode: 'environment' },
+                    { fps: 10, qrbox: { width: 220, height: 220 } },
+                    async (decodedText) => {
+                        await handleQrCodeDecoded(decodedText);
+                    }
+                );
+                qrScannerRunning = true;
+            } catch (error) {
+                console.error('Failed to start QR scanner', error);
+                alert('Unable to start QR scanner. Please allow camera permission.');
+                closeQrScanner();
+            }
+        }
+
+        async function closeQrScanner() {
+            if (qrScannerInstance && qrScannerRunning) {
+                try {
+                    await qrScannerInstance.stop();
+                } catch (error) {
+                    console.warn('Unable to stop QR scanner cleanly', error);
+                }
+            }
+            qrScannerRunning = false;
+            document.getElementById('qr-dialog').style.display = 'none';
+            document.getElementById('confirm-overlay').style.display = 'none';
+        }
+
+        async function getApplicantByCode(applicantCode) {
+            const codeColumns = ['Code', 'code'];
+            for (const column of codeColumns) {
+                const { data, error } = await supabaseClient
+                    .from('Applicants')
+                    .select('Name, name, applicant_name, Code, code')
+                    .eq(column, applicantCode)
+                    .limit(1);
+                if (error) {
+                    console.warn(`Applicant lookup failed on column ${column}`, error);
+                    continue;
+                }
+                if (Array.isArray(data) && data.length) {
+                    return data[0];
+                }
+            }
+            return null;
+        }
+
+        async function handleQrCodeDecoded(decodedText) {
+            const prefix = 'https://t.ly/';
+            if (!decodedText || !decodedText.startsWith(prefix)) {
+                return;
+            }
+
+            await closeQrScanner();
+
+            const applicantCode = decodedText.replace(prefix, '').trim();
+            if (!applicantCode) {
+                alert('Invalid QR code format.');
+                return;
+            }
+
+            let applicantName = '';
+            try {
+                const applicantRow = await getApplicantByCode(applicantCode);
+                if (!applicantRow) {
+                    alert('Applicant code not found.');
+                    return;
+                }
+                applicantName = applicantRow.Name || applicantRow.name || applicantRow.applicant_name || '';
+            } catch (error) {
+                console.error('Failed to validate applicant code', error);
+                alert('Unable to validate QR code right now.');
+                return;
+            }
+
+            const normalizedApplicantName = (applicantName || '').trim().toLowerCase();
+            const approvedEntry = Object.entries(allRequests).find(([, reqRaw]) => {
+                const req = normalizeRequest(reqRaw);
+                return req.resident === CURRENT_USER_NAME
+                    && req.status === 'approved'
+                    && (req.applicant || '').trim().toLowerCase() === normalizedApplicantName;
+            });
+
+            if (!approvedEntry) {
+                alert("This applicant doesn't have an approved request.");
+                return;
+            }
+
+            const [requestKey] = approvedEntry;
+            await db.ref(`requests/${requestKey}`).update({
+                status: 'completed',
+                completed_at: Date.now()
+            });
+            alert('completed');
         }
 
         function handleDayClick(dayName) {
@@ -1060,13 +1270,14 @@
                 req.slotIds.some(slotId => normalizeSlotId(slotId) === cleanId)
             );
             const slotData = parseStoredSlotValue(cleanId) || cleanId;
-            const slotLocation = (lastScheduleSnap && lastScheduleSnap.val() && (lastScheduleSnap.val().locations || {})[slotData]) || '';
+            const slotState = (lastScheduleSnap && lastScheduleSnap.val()) || {};
+            const slotLocation = (slotState.locations || {})[slotData] || '';
+            const slotResidentNote = (slotState.slot_notes || {})[slotData] || '';
             const [dayLabel, timeLabel] = slotData.split('-');
             const applicantRows = entries.length
                 ? entries.map(({ key, req, raw }) => {
                     const applicant = req.applicant || raw.applicant_name || 'Unknown applicant';
-                    const note = raw.resident_note || '';
-                    return `<div style="margin-bottom:10px;"><strong>${applicant}</strong><br><textarea data-request-key="${key}" class="slot-note" style="width:100%;min-height:52px;margin-top:6px;border:1px solid #E2E8F0;border-radius:8px;padding:8px;" placeholder="Add note for applicant">${note}</textarea></div>`;
+                    return `<div class="details-applicant-item">${applicant}</div>`;
                 }).join('')
                 : '<div>No approved applicants in this timeslot yet.</div>';
 
@@ -1078,14 +1289,27 @@
                 return `<option value="${loc}" ${selected}>${label}</option>`;
             }).join('');
             document.getElementById('details-message').innerHTML = `
-                <div><strong>Time:</strong> ${(dayLabel || '').toUpperCase()} - ${timeLabel || ''}</div>
-                ${isLocked ? `
-                <div style="margin-top:8px;"><strong>Location:</strong></div>
-                <select id="slot-location-select" style="width:100%;margin-top:6px;padding:8px;border:1px solid #E2E8F0;border-radius:8px;">${locationOptions}</select>
-                ` : '<div style="margin-top:8px;color:#64748b;font-size:12px;">Location can be assigned once this timeslot is locked.</div>'}
-                <div style="margin-top:10px;"><strong>Applicants:</strong></div>
-                <div style="margin-top:6px;">${applicantRows}</div>
-                <div class="dialog-actions" style="justify-content:space-between; margin-top:14px;">
+                <div class="details-meta">
+                    <div>
+                        <div class="details-label">Time Slot</div>
+                        <div class="details-value">${(dayLabel || '').toUpperCase()} - ${timeLabel || ''}</div>
+                    </div>
+                    <div>
+                        <div class="details-label">Location</div>
+                        ${isLocked
+                            ? `<select id="slot-location-select">${locationOptions}</select>`
+                            : '<div style="color:#64748b;font-size:12px;">Location can be assigned once this timeslot is locked.</div>'}
+                    </div>
+                </div>
+                <div class="details-applicants">
+                    <div class="details-label">Applicants</div>
+                    <div style="display:grid;gap:8px;">${applicantRows}</div>
+                </div>
+                <div class="details-notes">
+                    <div class="details-label">Overall Resident Note</div>
+                    <textarea id="slot-resident-note" rows="3" placeholder="Add an overall note for this timeslot">${slotResidentNote}</textarea>
+                </div>
+                <div class="dialog-actions" style="justify-content:space-between; margin-top:14px; align-items:center;">
                     <button class="toggle-lock-btn ${isManuallyLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${slotData}')">
                         <span>${isManuallyLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
                         <span class="toggle-lock-indicator"></span>
@@ -1099,19 +1323,13 @@
 
         async function saveSlotDetails(slotId) {
             const locationField = document.getElementById('slot-location-select');
+            const residentNoteField = document.getElementById('slot-resident-note');
             const locationValue = locationField ? locationField.value : null;
-            const updates = {};
-            document.querySelectorAll('.slot-note').forEach((field) => {
-                const key = field.getAttribute('data-request-key');
-                if (key) {
-                    updates[`requests/${key}/resident_note`] = field.value.trim();
-                }
-            });
-            if (Object.keys(updates).length) {
-                await db.ref().update(updates);
-            }
             if (locationValue !== null) {
                 db.ref(`schedules/${CURRENT_USER_KEY}/locations/${slotId}`).set(locationValue);
+            }
+            if (residentNoteField) {
+                db.ref(`schedules/${CURRENT_USER_KEY}/slot_notes/${slotId}`).set(residentNoteField.value.trim());
             }
             toast('✅ Slot details updated');
             closeDetailsDialog();
