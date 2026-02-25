@@ -1716,20 +1716,26 @@
                 if (moveEntries.length > 0) {
                     const updates = {};
                     const sourceSlotIds = new Set();
+                    const slotRemap = new Map();
                     const scheduleState = (lastScheduleSnap && lastScheduleSnap.val()) || {};
                     const scheduleLocations = scheduleState.locations || {};
                     const scheduleNotes = scheduleState.slot_notes || {};
-                    const sourceLocation = scheduleLocations[sourceClean] || '';
-                    const sourceNote = scheduleNotes[sourceClean] || '';
                     for (const [key, value] of moveEntries) {
                         const req = normalizeRequest(value);
-                        req.slotIds.forEach(slotId => sourceSlotIds.add(normalizeSlotId(slotId)));
+                        const normalizedSourceSlots = req.slotIds.map(slotId => normalizeSlotId(slotId));
+                        normalizedSourceSlots.forEach(slotId => sourceSlotIds.add(slotId));
                         const [day, timeKey] = targetId.split('-');
                         const newSlotIds = getConsecutiveSlotIds(day, timeKey, req.slotIds.length || 1);
                         if (!newSlotIds) {
                             toast("⚠️ Cannot reschedule to that slot range.");
                             return;
                         }
+                        normalizedSourceSlots.forEach((oldSlotId, index) => {
+                            const nextSlotId = normalizeSlotId(newSlotIds[index]);
+                            if (nextSlotId) {
+                                slotRemap.set(oldSlotId, nextSlotId);
+                            }
+                        });
                         updates[`requests/${key}/slot_id`] = newSlotIds[0];
                         updates[`requests/${key}/slot_ids`] = newSlotIds;
                         updates[`requests/${key}/time_slot`] = newSlotIds[0];
@@ -1747,12 +1753,17 @@
 
                     // Update schedule to revert source slots
                     updates[`schedules/${CURRENT_USER_KEY}/available_slots`] = serializeAvailableSlots(newSchedule);
-                    updates[`schedules/${CURRENT_USER_KEY}/locations/${targetId}`] = sourceLocation;
-                    updates[`schedules/${CURRENT_USER_KEY}/slot_notes/${targetId}`] = sourceNote;
-                    if (sourceClean !== targetId) {
-                        updates[`schedules/${CURRENT_USER_KEY}/locations/${sourceClean}`] = null;
-                        updates[`schedules/${CURRENT_USER_KEY}/slot_notes/${sourceClean}`] = null;
-                    }
+
+                    slotRemap.forEach((newSlotId, oldSlotId) => {
+                        const sourceLocation = scheduleLocations[oldSlotId] || '';
+                        const sourceNote = scheduleNotes[oldSlotId] || '';
+                        updates[`schedules/${CURRENT_USER_KEY}/locations/${newSlotId}`] = sourceLocation;
+                        updates[`schedules/${CURRENT_USER_KEY}/slot_notes/${newSlotId}`] = sourceNote;
+                        if (oldSlotId !== newSlotId) {
+                            updates[`schedules/${CURRENT_USER_KEY}/locations/${oldSlotId}`] = null;
+                            updates[`schedules/${CURRENT_USER_KEY}/slot_notes/${oldSlotId}`] = null;
+                        }
+                    });
 
                     await db.ref().update(updates);
                     toggleRescheduleMode();
