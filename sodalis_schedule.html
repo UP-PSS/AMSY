@@ -1162,46 +1162,31 @@
             document.getElementById('confirm-overlay').style.display = 'none';
         }
 
-        function normalizeApplicantCode(value) {
-            return (value || '').toString().trim().toLowerCase();
-        }
-
-        function decodeUriSafe(value) {
-            try {
-                return decodeURIComponent(value);
-            } catch (_error) {
-                return value;
-            }
-        }
-
         function extractApplicantCodeFromQr(decodedText) {
             if (!decodedText) {
                 return '';
             }
+        }
 
             const qrText = decodedText.trim();
-            if (!qrText) {
+            const normalizedText = qrText.toLowerCase();
+            const shortLinkPrefix = 't.ly/';
+            const fullLinkPrefix = 'https://t.ly/';
+            const bareDomainPrefix = 'https://t.ly';
+
+            if (normalizedText.startsWith(fullLinkPrefix)) {
+                return qrText.slice(fullLinkPrefix.length).trim();
+            }
+
+            if (normalizedText.startsWith(shortLinkPrefix)) {
+                return qrText.slice(shortLinkPrefix.length).trim();
+            }
+
+            if (normalizedText === bareDomainPrefix) {
                 return '';
             }
 
-            const withScheme = /^https?:\/\//i.test(qrText) ? qrText : `https://${qrText}`;
-            try {
-                const parsedUrl = new URL(withScheme);
-                if (parsedUrl.hostname.toLowerCase() === 't.ly') {
-                    return decodeUriSafe(parsedUrl.pathname.replace(/^\/+/, '').trim());
-                }
-            } catch (_error) {
-                // Continue to fallback parsing below.
-            }
-
-            const cleanedText = qrText
-                .replace(/^https?:\/\/t\.ly\//i, '')
-                .replace(/^t\.ly\//i, '')
-                .split('?')[0]
-                .split('#')[0]
-                .trim();
-
-            return decodeUriSafe(cleanedText);
+            return qrText;
         }
 
         async function handleQrCodeDecoded(decodedText) {
@@ -1217,8 +1202,9 @@
             try {
                 const { data, error } = await supabaseClient
                     .from('Applicants')
-                    .select('*')
-                    .limit(1000);
+                    .select('code, full_name')
+                    .eq('code', applicantCode)
+                    .limit(1);
                 if (error) {
                     throw error;
                 }
