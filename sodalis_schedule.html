@@ -214,17 +214,28 @@
         }
 
         #qr-dialog {
-            display: none;
+            display: block;
             position: fixed;
-            top: 50%;
+            top: 18px;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -18px);
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+            border: 1px solid #E2E8F0;
+            border-top: 5px solid var(--primary);
             z-index: 30002;
             padding: 20px;
             width: min(92vw, 460px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #qr-dialog.show {
+            opacity: 1;
+            pointer-events: all;
+            transform: translate(-50%, 0);
         }
 
         #qr-reader {
@@ -619,6 +630,81 @@
             letter-spacing: 0.4px;
         }
 
+        .top-notice {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            transform: translate(-50%, -18px);
+            min-width: min(90vw, 360px);
+            max-width: min(92vw, 460px);
+            background: #fff;
+            border: 1px solid #E2E8F0;
+            border-left: 5px solid var(--primary);
+            border-radius: 14px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+            z-index: 30010;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease, transform 0.22s ease;
+            overflow: hidden;
+        }
+
+        .top-notice.show {
+            opacity: 1;
+            pointer-events: all;
+            transform: translate(-50%, 0);
+        }
+
+        .top-notice.success { border-left-color: #16A34A; }
+        .top-notice.warning { border-left-color: #D97706; }
+        .top-notice.error { border-left-color: #DC2626; }
+
+        .top-notice-content {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 14px;
+        }
+
+        .top-notice-title {
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 800;
+            margin-bottom: 2px;
+        }
+
+        .top-notice-message {
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.4;
+            font-weight: 600;
+        }
+
+        .top-notice-close {
+            border: 1px solid #CBD5E1;
+            background: #fff;
+            color: #64748b;
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+        .popup-status {
+            margin-bottom: 8px;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--primary);
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -678,6 +764,7 @@
     </div>
     <div id="confirm-overlay"></div>
     <div id="qr-dialog">
+        <div class="popup-status">QR Notification</div>
         <div class="dialog-title">Scan QR Code</div>
         <div class="dialog-message">Scan an applicant QR code.</div>
         <div id="qr-reader"></div>
@@ -705,9 +792,18 @@
         <div class="mode-banner" id="modeBanner">RESCHEDULE MODE</div>
     </div>
     <div id="toast"></div>
+    <div id="top-notice" class="top-notice">
+        <div class="top-notice-content">
+            <div>
+                <div class="top-notice-title" id="top-notice-title">Notice</div>
+                <div class="top-notice-message" id="top-notice-message">Message</div>
+            </div>
+            <button class="top-notice-close" onclick="hideTopNotice()" aria-label="Close notification">×</button>
+        </div>
+    </div>
     <div id="loading-overlay">
         <div class="loading-spinner"></div>
-        <div class="loading-text">Processing schedule...</div>
+        <div class="loading-text" id="loading-text">Please wait...</div>
     </div>
 
     <div class="controls-panel" id="controlsPanel">
@@ -820,6 +916,10 @@
         let hasLoadedRequestsSnapshot = false;
         let qrScannerInstance = null;
         let qrScannerRunning = false;
+        let loadingTaskCount = 0;
+        let topNoticeTimer = null;
+        let initialScheduleLoaded = false;
+        let initialRequestsCountLoaded = false;
 
         function toggleControlsPanel() {
             const panel = document.getElementById('controlsPanel');
@@ -846,25 +946,29 @@
         }
 
         async function checkMaintenanceSetting() {
-            try {
-                const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
-                if (error || !data) return;
-                const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
-                const isEnabled = setting && Number(setting['Number']) === 1;
-                const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
-                const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
-                document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
-            } catch (err) {
-                console.warn('Maintenance check failed', err);
-            }
+            return withLoadingTask('Preparing page...', async () => {
+                try {
+                    const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
+                    if (error || !data) return;
+                    const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
+                    const isEnabled = setting && Number(setting['Number']) === 1;
+                    const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+                    const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
+                    document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
+                } catch (err) {
+                    console.warn('Maintenance check failed', err);
+                }
+            });
         }
 
         async function fetchLocations() {
-            const { data, error } = await supabaseClient.from('Locations').select('locations');
-            if (data) {
-                locationChoices = data.map(i => i.locations).filter(l => l);
-                console.log("Locations loaded:", locationChoices);
-            }
+            return withLoadingTask('Preparing page...', async () => {
+                const { data, error } = await supabaseClient.from('Locations').select('locations');
+                if (data) {
+                    locationChoices = data.map(i => i.locations).filter(l => l);
+                    console.log("Locations loaded:", locationChoices);
+                }
+            });
         }
 
         async function getCurrentUserClassification() {
@@ -912,36 +1016,38 @@
         }
 
         async function fetchUserQuota() {
-            const classification = await getCurrentUserClassification();
-            if (!classification) {
-                console.warn('No user classification found. Falling back to default quota:', USER_QUOTA);
-                isQuotaLoaded = true;
-                return;
-            }
-            const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
-            if (error || !data) {
-                console.warn('Failed to load user quota', error);
-                isQuotaLoaded = true;
-                return;
-            }
-            const normalizedClassification = normalizeClassification(classification);
-            const match = data.find(row => {
-                const settingTitle = row['Setting title'] || row['Settingtitle'];
-                return normalizeClassification(settingTitle) === normalizedClassification;
-            });
-            if (match && match['Number'] !== undefined && match['Number'] !== null) {
-                const quota = Number(match['Number']);
-                if (!Number.isNaN(quota) && quota > 0) {
-                    USER_QUOTA = quota;
-                    slotLimit = USER_QUOTA;
-                } else {
-                    console.warn('Invalid quota value for classification. Using default quota:', classification, match['Number']);
+            return withLoadingTask('Preparing schedule...', async () => {
+                const classification = await getCurrentUserClassification();
+                if (!classification) {
+                    console.warn('No user classification found. Falling back to default quota:', USER_QUOTA);
+                    isQuotaLoaded = true;
+                    return;
                 }
-            } else {
-                console.warn('No quota configuration found for classification. Using default quota:', classification, USER_QUOTA);
-            }
+                const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
+                if (error || !data) {
+                    console.warn('Failed to load user quota', error);
+                    isQuotaLoaded = true;
+                    return;
+                }
+                const normalizedClassification = normalizeClassification(classification);
+                const match = data.find(row => {
+                    const settingTitle = row['Setting title'] || row['Settingtitle'];
+                    return normalizeClassification(settingTitle) === normalizedClassification;
+                });
+                if (match && match['Number'] !== undefined && match['Number'] !== null) {
+                    const quota = Number(match['Number']);
+                    if (!Number.isNaN(quota) && quota > 0) {
+                        USER_QUOTA = quota;
+                        slotLimit = USER_QUOTA;
+                    } else {
+                        console.warn('Invalid quota value for classification. Using default quota:', classification, match['Number']);
+                    }
+                } else {
+                    console.warn('No quota configuration found for classification. Using default quota:', classification, USER_QUOTA);
+                }
 
-            isQuotaLoaded = true;
+                isQuotaLoaded = true;
+            });
         }
 
         const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -1354,11 +1460,12 @@
 
         async function openQrScanner() {
             if (typeof Html5Qrcode === 'undefined') {
-                alert('QR scanner is unavailable in this browser.');
+                showTopNotice('QR Scanner', 'Scanner is unavailable in this browser.', 'warning');
                 return;
             }
+            const qrDialog = document.getElementById('qr-dialog');
             document.getElementById('confirm-overlay').style.display = 'block';
-            document.getElementById('qr-dialog').style.display = 'block';
+            qrDialog.classList.add('show');
             if (!qrScannerInstance) {
                 qrScannerInstance = new Html5Qrcode('qr-reader');
             }
@@ -1376,7 +1483,7 @@
                 qrScannerRunning = true;
             } catch (error) {
                 console.error('Failed to start QR scanner', error);
-                alert('Unable to start QR scanner. Please allow camera permission.');
+                showTopNotice('QR Scanner', 'Unable to start scanner. Allow camera permission then try again.', 'warning');
                 closeQrScanner();
             }
         }
@@ -1390,7 +1497,7 @@
                 }
             }
             qrScannerRunning = false;
-            document.getElementById('qr-dialog').style.display = 'none';
+            document.getElementById('qr-dialog').classList.remove('show');
             document.getElementById('confirm-overlay').style.display = 'none';
         }
 
@@ -1428,7 +1535,7 @@
         async function handleQrCodeDecoded(decodedText) {
             const applicantCode = extractApplicantCodeFromQr(decodedText);
             if (!applicantCode) {
-                alert('Invalid QR code format.');
+                showTopNotice('QR Scanner', 'Invalid QR code format.', 'warning');
                 return;
             }
 
@@ -1436,11 +1543,11 @@
 
             let applicantName = '';
             try {
-                const { data, error } = await supabaseClient
+                const { data, error } = await withLoadingTask('Verifying QR code...', () => supabaseClient
                     .from('Applicants')
                     .select('code, full_name')
                     .eq('code', applicantCode)
-                    .limit(1);
+                    .limit(1));
                 if (error) {
                     throw error;
                 }
@@ -1459,13 +1566,13 @@
                 });
 
                 if (!applicantRow) {
-                    alert('Applicant code not found.');
+                    showTopNotice('QR Scanner', 'Applicant code not found.', 'warning');
                     return;
                 }
                 applicantName = applicantRow.full_name || applicantRow.Name || applicantRow.name || applicantRow.applicant_name || '';
             } catch (error) {
                 console.error('Failed to validate applicant code', error);
-                alert('Unable to validate QR code right now.');
+                showTopNotice('QR Scanner', 'Unable to validate QR code right now.', 'error');
                 return;
             }
 
@@ -1478,16 +1585,16 @@
             });
 
             if (!approvedEntry) {
-                alert("This applicant doesn't have an approved request.");
+                showTopNotice('QR Scanner', "This applicant doesn't have an approved request.", 'warning');
                 return;
             }
 
             const [requestKey] = approvedEntry;
-            await db.ref(`requests/${requestKey}`).update({
+            await withLoadingTask('Updating schedule...', () => db.ref(`requests/${requestKey}`).update({
                 status: 'completed',
                 completed_at: Date.now()
-            });
-            alert('completed');
+            }));
+            showTopNotice('QR Scanner', 'Request marked as completed.', 'success');
         }
 
         function handleDayClick(dayName) {
@@ -2275,13 +2382,61 @@
             }, 3000);
         }
 
-        function showLoading(isLoading) {
+        function showTopNotice(title, message, type = 'success', timeout = 3200) {
+            const notice = document.getElementById('top-notice');
+            const titleEl = document.getElementById('top-notice-title');
+            const messageEl = document.getElementById('top-notice-message');
+            if (!notice || !titleEl || !messageEl) return;
+
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            notice.classList.remove('success', 'warning', 'error');
+            notice.classList.add(type);
+            notice.classList.add('show');
+
+            clearTimeout(topNoticeTimer);
+            topNoticeTimer = setTimeout(() => {
+                hideTopNotice();
+            }, timeout);
+        }
+
+        function hideTopNotice() {
+            const notice = document.getElementById('top-notice');
+            if (!notice) return;
+            notice.classList.remove('show');
+        }
+
+        function showLoading(isLoading, message = 'Please wait...') {
             const overlay = document.getElementById('loading-overlay');
+            const text = document.getElementById('loading-text');
+            if (text) text.textContent = message;
             overlay.classList.toggle('show', isLoading);
+        }
+
+        function beginLoadingTask(message = 'Please wait...') {
+            loadingTaskCount += 1;
+            showLoading(true, message);
+        }
+
+        function endLoadingTask() {
+            loadingTaskCount = Math.max(0, loadingTaskCount - 1);
+            if (loadingTaskCount === 0) {
+                showLoading(false);
+            }
+        }
+
+        async function withLoadingTask(message, task) {
+            beginLoadingTask(message);
+            try {
+                return await task();
+            } finally {
+                endLoadingTask();
+            }
         }
 
         // Initialize
         build();
+        beginLoadingTask('Loading saved schedule...');
         fetchLocations();
         checkMaintenanceSetting();
         toast("👁️ View Mode: Click slots for details. Enable Edit Mode to change availability.");
@@ -2299,13 +2454,26 @@
         // Listen for schedule changes
         db.ref(`schedules/${CURRENT_USER_KEY}`).on('value', (snap) => {
             lastScheduleSnap = snap;
+            if (!initialScheduleLoaded) {
+                initialScheduleLoaded = true;
+                endLoadingTask();
+            }
             if (hasUnsavedChanges) return;
             render(snap);
         });
 
         // Listen for request changes
         db.ref('requests').on('value', async (snap) => {
+            if (!initialRequestsCountLoaded) {
+                beginLoadingTask('Checking requests...');
+            }
             const nextRequests = snap.val() || {};
+            if (!initialRequestsCountLoaded) {
+                initialRequestsCountLoaded = true;
+                const requestCount = Object.keys(nextRequests).length;
+                endLoadingTask();
+                showTopNotice('Requests Ready', `${requestCount} request record${requestCount === 1 ? '' : 's'} loaded.`, 'success', 2600);
+            }
             if (!hasLoadedRequestsSnapshot) {
                 hasLoadedRequestsSnapshot = true;
                 allRequests = nextRequests;
@@ -2314,7 +2482,8 @@
                     render(lastScheduleSnap);
                     return;
                 }
-                db.ref(`schedules/${CURRENT_USER_KEY}`).once('value').then(render);
+                const scheduleSnap = await withLoadingTask('Updating schedule...', () => db.ref(`schedules/${CURRENT_USER_KEY}`).once('value'));
+                render(scheduleSnap);
                 return;
             }
             const approvedSlots = getSlotsFromApprovalTransitions(allRequests, nextRequests);
@@ -2335,22 +2504,22 @@
                 render(lastScheduleSnap);
                 return;
             }
-            db.ref(`schedules/${CURRENT_USER_KEY}`).once('value').then(render);
+            const scheduleSnap = await withLoadingTask('Updating schedule...', () => db.ref(`schedules/${CURRENT_USER_KEY}`).once('value'));
+            render(scheduleSnap);
         });
 
         fetchUserQuota()
             .catch((error) => {
                 console.warn('Unexpected quota fetch error. Using default quota:', USER_QUOTA, error);
             })
-            .finally(() => {
+            .finally(async () => {
                 isQuotaLoaded = true;
-                db.ref(`schedules/${CURRENT_USER_KEY}`).once('value').then((snap) => {
-                    if (!snap.exists() && lastScheduleSnap) {
-                        render(lastScheduleSnap);
-                        return;
-                    }
-                    render(snap);
-                });
+                const snap = await withLoadingTask('Loading saved schedule...', () => db.ref(`schedules/${CURRENT_USER_KEY}`).once('value'));
+                if (!snap.exists() && lastScheduleSnap) {
+                    render(lastScheduleSnap);
+                    return;
+                }
+                render(snap);
             });
 
     </script>
