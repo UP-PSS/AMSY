@@ -801,6 +801,7 @@
         let isEditMode = false, isRescheduleMode = false, selectedSourceId = null, slotLimit = 3;
         let userSchedule = [], allRequests = {}, locationChoices = [], activeSlotForLoc = null;
         let manualLockedSlots = new Set();
+        let manualUnlockedSlots = new Set();
         let localScheduleState = {};
         let isDragging = false, dragStartSlot = null, dragHasMoved = false, dragIgnoreClick = false;
         let longPressTimer = null, pointerDownSlot = null, draggedTargetSlot = null, pointerDownAt = 0;
@@ -976,17 +977,19 @@
         function formatSlotForStorage(slotId) {
             if (!slotId) return slotId;
             const isLocked = slotId.includes("(/)");
-            const clean = slotId.replace("(/)", "");
+            const isUnlocked = slotId.includes("(u)");
+            const clean = slotId.replace("(/)", "").replace("(u)", "");
             const parts = clean.split('-');
             if (parts.length < 2) return slotId;
             const [day, timeKey] = parts;
             const timeSlot = TIME_SLOTS.find(slot => slot.id === timeKey);
             if (!timeSlot) return slotId;
             const dayLabel = (DAY_NAME_LOOKUP[day.toUpperCase()] || day).toUpperCase();
-            const display = `${dayLabel} - ${compactTimeLabel(timeSlot.start)}`;
-            return isLocked ? `${display}(/)` : display;
+            const display = `${dayLabel} - ${timeSlot.start}`;
+            return isLocked ? `${display}(/)` : isUnlocked ? `${display}(u)` : display;
         }
 
+        // Used only for comparison, not display or storage
         function compactTimeLabel(timeLabel) {
             return (timeLabel || '').replace(/\s+/g, '');
         }
@@ -994,13 +997,17 @@
         function parseStoredSlotValue(value) {
             if (!value) return value;
             const isLocked = value.includes("(/)");
-            const clean = value.replace("(/)", "").trim();
+            const isUnlocked = value.includes("(u)");
+            const clean = value.replace("(/)", "").replace("(u)", "").trim();
             if (clean.includes(' - ')) {
                 const [dayLabel, timeLabel] = clean.split(' - ').map(part => part.trim());
                 const dayName = DAY_NAME_LOOKUP[dayLabel.toUpperCase()] || dayLabel;
-                const slot = TIME_SLOTS.find(time => compactTimeLabel(time.start).toUpperCase() === compactTimeLabel(timeLabel).toUpperCase());
+                // Support both "8:00 AM" (new) and "8:00AM" (old compact) formats
+                const slot = TIME_SLOTS.find(time =>
+                    compactTimeLabel(time.start).toUpperCase() === compactTimeLabel(timeLabel).toUpperCase()
+                );
                 if (dayName && slot) {
-                    return `${dayName}-${slot.id}${isLocked ? "(/)" : ""}`;
+                    return `${dayName}-${slot.id}${isLocked ? "(/)" : isUnlocked ? "(u)" : ""}`;
                 }
             }
             return value;
@@ -1009,7 +1016,7 @@
         function normalizeSlotId(slotId) {
             if (!slotId) return '';
             const parsed = parseStoredSlotValue(slotId);
-            const clean = (parsed || slotId).replace("(/)", "").trim();
+            const clean = (parsed || slotId).replace("(/)", "").replace("(u)", "").trim();
             if (clean.includes('-')) {
                 const [dayRaw, timeRaw] = clean.split('-');
                 const dayName = DAY_NAME_LOOKUP[(dayRaw || '').trim().toUpperCase()] || (dayRaw || '').trim();
@@ -1212,7 +1219,10 @@
                     }
                 }
             } else if (isEditMode) {
+                // Locked slots cannot be toggled in edit mode — use the lock button in details
+                if (el.classList.contains('locked')) return;
                 manualLockedSlots.delete(el.id);
+                manualUnlockedSlots.delete(el.id);
                 el.classList.toggle('available');
                 localScheduleState[el.id] = el.classList.contains('available');
                 markScheduleChanged();
@@ -1373,7 +1383,7 @@
 
         function deleteDaySchedule(dayName) {
             const slotsToRemove = userSchedule.filter(slot => {
-                const clean = slot.replace("(/)", "");
+                const clean = slot.replace("(/)", "").replace("(u)", "").trim();
                 if (!clean.startsWith(`${dayName}-`)) {
                     return false;
                 }
@@ -1382,7 +1392,7 @@
             });
 
             const newSchedule = userSchedule.filter(slot => {
-                const clean = slot.replace("(/)", "");
+                const clean = slot.replace("(/)", "").replace("(u)", "").trim();
                 if (!clean.startsWith(`${dayName}-`)) {
                     return true;
                 }
@@ -1395,18 +1405,30 @@
         }
 
 
+        // Tracks which slot is currently open in the details dialog
+        let activeDetailsSlotId = null;
+
         function showSlotDetails(el) {
             const cleanId = normalizeSlotId(el.id);
-            const entries = Object.entries(allRequests).map(([key, value]) => ({ key, req: normalizeRequest(value), raw: value })).filter(({ req }) =>
-                req.resident === CURRENT_USER_NAME &&
-                req.status === 'approved' &&
-                req.slotIds.some(slotId => normalizeSlotId(slotId) === cleanId)
-            );
-            const slotData = parseStoredSlotValue(cleanId) || cleanId;
+            activeDetailsSlotId = cleanId;
+            const entries = Object.entries(allRequests)
+                .map(([key, value]) => ({ key, req: normalizeRequest(value), raw: value }))
+                .filter(({ req }) =>
+                    req.resident === CURRENT_USER_NAME &&
+                    req.status === 'approved' &&
+                    req.slotIds.some(slotId => normalizeSlotId(slotId) === cleanId)
+                );
             const slotState = (lastScheduleSnap && lastScheduleSnap.val()) || {};
-            const slotLocation = (slotState.locations || {})[slotData] || '';
-            const slotResidentNote = (slotState.slot_notes || {})[slotData] || '';
-            const [dayLabel, timeLabel] = slotData.split('-');
+            // Location and note are keyed by cleanId
+            const slotLocation = (slotState.locations || {})[cleanId] || '';
+            const slotResidentNote = (slotState.slot_notes || {})[cleanId] || '';
+
+            // Look up proper time label from TIME_SLOTS (e.g. "8:00 AM")
+            const [dayPart, timeKey] = cleanId.split('-');
+            const timeSlotInfo = TIME_SLOTS.find(s => s.id === timeKey);
+            const displayTime = timeSlotInfo ? timeSlotInfo.start : timeKey;
+            const displayLabel = `${(dayPart || '').toUpperCase()} - ${displayTime}`;
+
             const applicantRows = entries.length
                 ? entries.map(({ key, req, raw }) => {
                     const applicant = req.applicant || raw.applicant_name || 'Unknown applicant';
@@ -1420,91 +1442,118 @@
                             ${avatarTag}
                             <span class="details-applicant-name">${applicant}</span>
                         </div>
-                        <button class="details-applicant-remove" onclick="cancelApprovedRequest('${key.replace(/'/g, "\\'")}')" aria-label="Cancel request for ${applicant}">×</button>
+                        <button class="details-applicant-remove" onclick="cancelApprovedRequest('${key.replace(/'/g, "\'")}')" aria-label="Cancel request for ${applicant}">×</button>
                     </div>`;
                 }).join('')
-                : '<div>No approved applicants in this timeslot yet.</div>';
+                : '<div style="color:#64748b;font-size:13px;">No approved applicants in this timeslot yet.</div>';
 
-            const isManuallyLocked = manualLockedSlots.has(slotData);
-            const isLocked = el.classList.contains('locked') || isManuallyLocked;
+            // A slot is locked if: DOM has locked class OR it is in manualLockedSlots
+            const isManuallyLocked = manualLockedSlots.has(cleanId);
+            const isActuallyLocked = el.classList.contains('locked') || isManuallyLocked;
+
             const locationOptions = [''].concat(locationChoices).map(loc => {
                 const selected = loc === slotLocation ? 'selected' : '';
                 const label = loc || 'No location assigned';
                 return `<option value="${loc}" ${selected}>${label}</option>`;
             }).join('');
+
             document.getElementById('details-message').innerHTML = `
                 <div class="details-meta">
                     <div>
                         <div class="details-label">Time Slot</div>
-                        <div class="details-value">${(dayLabel || '').toUpperCase()} - ${compactTimeLabel(timeLabel || '')}</div>
+                        <div class="details-value">${displayLabel}</div>
                     </div>
+                    ${isActuallyLocked ? `
                     <div>
                         <div class="details-label">Location</div>
-                        ${isLocked
-                            ? `<select id="slot-location-select">${locationOptions}</select>`
-                            : '<div style="color:#64748b;font-size:12px;">Location can be assigned once this timeslot is locked.</div>'}
-                    </div>
+                        <select id="slot-location-select" onchange="autoSaveSlotLocation(this.value, '${cleanId}')">${locationOptions}</select>
+                    </div>` : ''}
                 </div>
                 <div class="details-applicants">
                     <div class="details-label">Applicants</div>
                     <div style="display:grid;gap:8px;">${applicantRows}</div>
                 </div>
+                ${isActuallyLocked ? `
                 <div class="details-notes">
                     <div class="details-label">Overall Resident Note</div>
-                    <textarea id="slot-resident-note" rows="3" placeholder="Add an overall note for this timeslot">${slotResidentNote}</textarea>
-                </div>
+                    <textarea id="slot-resident-note" rows="3" placeholder="Add an overall note for this timeslot"
+                        onblur="autoSaveSlotNote(this.value, '${cleanId}')">${slotResidentNote}</textarea>
+                </div>` : ''}
                 <div class="dialog-actions" style="justify-content:space-between; margin-top:14px; align-items:center;">
-                    <button class="toggle-lock-btn ${isLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${slotData}')">
-                        <span>${isLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
+                    <button class="toggle-lock-btn ${isActuallyLocked ? 'active' : ''}" onclick="toggleManualSlotLock('${cleanId}')">
+                        <span>${isActuallyLocked ? 'Slot Locked' : 'Slot Unlocked'}</span>
                         <span class="toggle-lock-indicator"></span>
                     </button>
-                    <button class="dialog-btn dialog-btn-confirm" onclick="saveSlotDetails('${slotData}')">Save Details</button>
+                    <button class="dialog-btn dialog-btn-cancel" onclick="closeDetailsDialog()">Close</button>
                 </div>
             `;
             document.getElementById('confirm-overlay').style.display = 'block';
             document.getElementById('details-dialog').style.display = 'block';
         }
 
+        // Auto-save location immediately on change
+        function autoSaveSlotLocation(value, slotId) {
+            db.ref(`schedules/${CURRENT_USER_KEY}/locations/${slotId}`).set(value);
+            const updates = {};
+            Object.keys(allRequests).forEach(key => {
+                const req = normalizeRequest(allRequests[key]);
+                if (req.resident === CURRENT_USER_NAME && req.status === 'approved' &&
+                    req.slotIds.some(sid => normalizeSlotId(sid) === slotId)) {
+                    updates[`requests/${key}/Location`] = value;
+                }
+            });
+            if (Object.keys(updates).length) db.ref().update(updates);
+            toast(value ? `📍 Location saved: ${value}` : '❌ Location cleared');
+        }
+
+        // Auto-save note immediately on blur
+        function autoSaveSlotNote(value, slotId) {
+            db.ref(`schedules/${CURRENT_USER_KEY}/slot_notes/${slotId}`).set(value.trim());
+            toast('📝 Note saved');
+        }
+
+        // Cancel an approved request and immediately refresh the dialog
         async function cancelApprovedRequest(requestKey) {
             if (!requestKey || !allRequests[requestKey]) return;
             const req = normalizeRequest(allRequests[requestKey]);
             if (req.status !== 'approved') return;
             await db.ref(`requests/${requestKey}/status`).set('cancelled');
+            // Update local state immediately so dialog reflects change without waiting for Firebase
+            allRequests[requestKey] = { ...allRequests[requestKey], status: 'cancelled' };
             toast('The approved request has been cancelled.');
-        }
-
-        async function saveSlotDetails(slotId) {
-            const locationField = document.getElementById('slot-location-select');
-            const residentNoteField = document.getElementById('slot-resident-note');
-            const locationValue = locationField ? locationField.value : null;
-            if (locationValue !== null) {
-                db.ref(`schedules/${CURRENT_USER_KEY}/locations/${slotId}`).set(locationValue);
+            // Refresh the open dialog immediately
+            if (activeDetailsSlotId) {
+                const el = document.getElementById(activeDetailsSlotId);
+                if (el) showSlotDetails(el);
             }
-            if (residentNoteField) {
-                db.ref(`schedules/${CURRENT_USER_KEY}/slot_notes/${slotId}`).set(residentNoteField.value.trim());
-            }
-            toast('✅ Slot details updated');
-            closeDetailsDialog();
         }
 
         function toggleManualSlotLock(slotId) {
             const slot = document.getElementById(slotId);
             if (!slot) return;
-            if (manualLockedSlots.has(slotId)) {
+
+            const isCurrentlyLocked = slot.classList.contains('locked') || manualLockedSlots.has(slotId);
+
+            if (isCurrentlyLocked) {
+                // Force-unlock: remove from manual lock, add to manualUnlocked so quota won't re-lock it
                 manualLockedSlots.delete(slotId);
-                if (!slot.querySelector('.initials-badge')) {
-                    slot.classList.add('available');
-                    slot.classList.remove('locked');
-                }
+                manualUnlockedSlots.add(slotId);
+                slot.classList.remove('locked');
+                slot.classList.add('available');
                 toast('🔓 Slot unlocked');
             } else {
+                // Manual lock: add to manualLockedSlots, clear any force-unlock
                 manualLockedSlots.add(slotId);
+                manualUnlockedSlots.delete(slotId);
                 slot.classList.remove('available');
                 slot.classList.add('locked');
                 toast('🔒 Slot locked');
             }
-            markScheduleChanged();
+
+            // Force immediate save — do not rely on debounce
+            hasUnsavedChanges = true;
             saveData();
+            // Refresh the dialog to show updated lock state
             showSlotDetails(slot);
         }
 
@@ -1617,9 +1666,10 @@
 
                     // Always revert source slots to purple (available) state
                     const newSchedule = userSchedule.map(s => {
-                        const clean = s.replace("(/)", "");
+                        const clean = s.replace("(/)", "").replace("(u)", "").trim();
                         if (sourceSlotIds.has(clean)) {
-                            return s.replace("(/)", "");
+                            // Revert source slot to plain available (no lock suffixes)
+                            return clean;
                         }
                         return s;
                     });
@@ -1696,6 +1746,8 @@
             document.querySelectorAll('.slot').forEach(s => {
                 if (manualLockedSlots.has(s.id)) {
                     slots.push(s.id + "(/)");
+                } else if (manualUnlockedSlots.has(s.id)) {
+                    slots.push(s.id + "(u)");
                 } else if (s.classList.contains('available') || s.classList.contains('locked')) {
                     slots.push(s.id);
                 }
@@ -1727,7 +1779,17 @@
             lastScheduleSnap = snap;
             const snapVal = snap.val() || {};
             userSchedule = (snapVal.available_slots || []).map(parseStoredSlotValue);
-            manualLockedSlots = new Set((snapVal.available_slots || []).filter(slot => (slot || '').includes('(/)')).map(slot => parseStoredSlotValue(slot)));
+            // Build sets using clean IDs (no suffixes)
+            manualLockedSlots = new Set(
+                (snapVal.available_slots || [])
+                    .filter(slot => (slot || '').includes('(/)'))
+                    .map(slot => parseStoredSlotValue(slot).replace('(/)', '').replace('(u)', '').trim())
+            );
+            manualUnlockedSlots = new Set(
+                (snapVal.available_slots || [])
+                    .filter(slot => (slot || '').includes('(u)'))
+                    .map(slot => parseStoredSlotValue(slot).replace('(/)', '').replace('(u)', '').trim())
+            );
             const locs = snapVal.locations || {};
 
             document.querySelectorAll('.slot').forEach(s => {
@@ -1756,10 +1818,13 @@
             const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
 
             userSchedule.forEach(raw => {
-                const clean = raw.replace("(/)", "");
+                const clean = raw.replace("(/)", "").replace("(u)", "").trim();
                 const el = document.getElementById(clean);
                 if (el) {
-                    const isLocked = manualLockedSlots.has(clean) || (counts[clean] >= activeQuota);
+                    const isManuallyLocked = manualLockedSlots.has(clean);
+                    const isManuallyUnlocked = manualUnlockedSlots.has(clean);
+                    const isQuotaLocked = !isManuallyUnlocked && (counts[clean] || 0) >= activeQuota;
+                    const isLocked = isManuallyLocked || isQuotaLocked;
                     if (isLocked) {
                         el.classList.add('locked');
                         if (locs[clean]) {
