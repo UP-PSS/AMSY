@@ -1162,26 +1162,47 @@
             document.getElementById('confirm-overlay').style.display = 'none';
         }
 
-        async function handleQrCodeDecoded(decodedText) {
-            const prefix = 't.ly/';
-            if (!decodedText || !decodedText.startsWith(prefix)) {
-                return;
+        function extractApplicantCodeFromQr(decodedText) {
+            if (!decodedText) {
+                return '';
             }
 
-            await closeQrScanner();
+            const qrText = decodedText.trim();
+            const normalizedText = qrText.toLowerCase();
+            const shortLinkPrefix = 't.ly/';
+            const fullLinkPrefix = 'https://t.ly/';
+            const bareDomainPrefix = 'https://t.ly';
 
-            const applicantCode = decodedText.replace(prefix, '').trim();
+            if (normalizedText.startsWith(fullLinkPrefix)) {
+                return qrText.slice(fullLinkPrefix.length).trim();
+            }
+
+            if (normalizedText.startsWith(shortLinkPrefix)) {
+                return qrText.slice(shortLinkPrefix.length).trim();
+            }
+
+            if (normalizedText === bareDomainPrefix) {
+                return '';
+            }
+
+            return qrText;
+        }
+
+        async function handleQrCodeDecoded(decodedText) {
+            const applicantCode = extractApplicantCodeFromQr(decodedText);
             if (!applicantCode) {
                 alert('Invalid QR code format.');
                 return;
             }
+
+            await closeQrScanner();
 
             let applicantName = '';
             try {
                 const { data, error } = await supabaseClient
                     .from('Applicants')
                     .select('code, full_name')
-                    .or(`code.eq.${applicantCode}`)
+                    .eq('code', applicantCode)
                     .limit(1);
                 if (error) {
                     throw error;
@@ -1191,7 +1212,7 @@
                     alert('Applicant code not found.');
                     return;
                 }
-                applicantName = applicantRow.Name || applicantRow.name || applicantRow.applicant_name || '';
+                applicantName = applicantRow.full_name || applicantRow.Name || applicantRow.name || applicantRow.applicant_name || '';
             } catch (error) {
                 console.error('Failed to validate applicant code', error);
                 alert('Unable to validate QR code right now.');
