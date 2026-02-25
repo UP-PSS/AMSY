@@ -1584,9 +1584,16 @@
             if (!requestKey || !allRequests[requestKey]) return;
             const req = normalizeRequest(allRequests[requestKey]);
             if (req.status !== 'approved') return;
-            await db.ref(`requests/${requestKey}/status`).set('cancelled');
+            await db.ref(`requests/${requestKey}`).update({
+                status: 'cancelled',
+                status_message: 'Cancelled by Sodalis'
+            });
             // Update local state immediately so dialog reflects change without waiting for Firebase
-            allRequests[requestKey] = { ...allRequests[requestKey], status: 'cancelled' };
+            allRequests[requestKey] = {
+                ...allRequests[requestKey],
+                status: 'cancelled',
+                status_message: 'Cancelled by Sodalis'
+            };
             toast('The approved request has been cancelled.');
             // Refresh the open dialog immediately
             if (activeDetailsSlotId) {
@@ -1717,7 +1724,9 @@
                 if (moveEntries.length > 0) {
                     const updates = {};
                     const sourceSlotIds = new Set();
+                    const targetSlotIds = new Set();
                     const slotRemap = new Map();
+                    const nextRequestsSnapshot = { ...allRequests };
                     const scheduleState = (lastScheduleSnap && lastScheduleSnap.val()) || {};
                     const scheduleLocations = scheduleState.locations || {};
                     const scheduleNotes = scheduleState.slot_notes || {};
@@ -1734,9 +1743,16 @@
                         normalizedSourceSlots.forEach((oldSlotId, index) => {
                             const nextSlotId = normalizeSlotId(newSlotIds[index]);
                             if (nextSlotId) {
+                                targetSlotIds.add(nextSlotId);
                                 slotRemap.set(oldSlotId, nextSlotId);
                             }
                         });
+                        nextRequestsSnapshot[key] = {
+                            ...value,
+                            slot_id: newSlotIds[0],
+                            slot_ids: newSlotIds,
+                            time_slot: newSlotIds[0]
+                        };
                         updates[`requests/${key}/slot_id`] = newSlotIds[0];
                         updates[`requests/${key}/slot_ids`] = newSlotIds;
                         updates[`requests/${key}/time_slot`] = newSlotIds[0];
@@ -1752,8 +1768,21 @@
                         return s;
                     });
 
+                    const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
+                    const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
+                    const approvedCounts = getApprovedCountsBySlot(nextRequestsSnapshot);
+                    const updatedSchedule = newSchedule.map(rawSlot => {
+                        const clean = rawSlot.replace("(/)", "").replace("(u)", "").trim();
+                        const isManualLock = rawSlot.includes('(/)');
+                        const isAutoLock = rawSlot.includes('(u)');
+                        if (isManualLock || isAutoLock) return rawSlot;
+                        if (!targetSlotIds.has(clean)) return rawSlot;
+                        if ((approvedCounts[clean] || 0) < activeQuota) return rawSlot;
+                        return `${clean}(/)`;
+                    });
+
                     // Update schedule to revert source slots
-                    updates[`schedules/${CURRENT_USER_KEY}/available_slots`] = serializeAvailableSlots(newSchedule);
+                    updates[`schedules/${CURRENT_USER_KEY}/available_slots`] = serializeAvailableSlots(updatedSchedule);
 
                     slotRemap.forEach((newSlotId, oldSlotId) => {
                         const sourceLocation = scheduleLocations[oldSlotId] || '';
