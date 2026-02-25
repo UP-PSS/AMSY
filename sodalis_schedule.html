@@ -1162,25 +1162,6 @@
             document.getElementById('confirm-overlay').style.display = 'none';
         }
 
-        async function getApplicantByCode(applicantCode) {
-            const codeColumns = ['Code', 'code'];
-            for (const column of codeColumns) {
-                const { data, error } = await supabaseClient
-                    .from('Applicants')
-                    .select('Name, name, applicant_name, Code, code')
-                    .eq(column, applicantCode)
-                    .limit(1);
-                if (error) {
-                    console.warn(`Applicant lookup failed on column ${column}`, error);
-                    continue;
-                }
-                if (Array.isArray(data) && data.length) {
-                    return data[0];
-                }
-            }
-            return null;
-        }
-
         async function handleQrCodeDecoded(decodedText) {
             const prefix = 'https://t.ly/';
             if (!decodedText || !decodedText.startsWith(prefix)) {
@@ -1197,7 +1178,15 @@
 
             let applicantName = '';
             try {
-                const applicantRow = await getApplicantByCode(applicantCode);
+                const { data, error } = await supabaseClient
+                    .from('Applicants')
+                    .select('*')
+                    .or(`Code.eq.${applicantCode},code.eq.${applicantCode}`)
+                    .limit(1);
+                if (error) {
+                    throw error;
+                }
+                const applicantRow = (data || [])[0];
                 if (!applicantRow) {
                     alert('Applicant code not found.');
                     return;
