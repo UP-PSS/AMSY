@@ -170,11 +170,44 @@
 
         .container-layout {
             display: grid;
-            grid-template-columns: 1fr 400px;
-            gap: 30px;
-            max-width: 1600px;
+            grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+            gap: 20px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 10px 20px;
+            align-items: start;
+        }
+
+        .resident-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: white;
+            border: 1px solid rgba(83, 28, 121, 0.15);
+            border-radius: 999px;
+            padding: 7px 14px 7px 8px;
+            box-shadow: 0 8px 20px rgba(83, 28, 121, 0.08);
+        }
+
+        .resident-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            background: #531C79;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            flex-shrink: 0;
+            object-fit: cover;
+        }
+
+        .history-pane {
+            max-height: calc(100vh - 210px);
+            overflow-y: auto;
+            padding-right: 4px;
         }
 
         @media (max-width: 1200px) {
@@ -196,7 +229,7 @@
         }
     </style>
 </head>
-<body class="bg-[#F9FAFB] font-sans antialiased text-gray-900 min-h-screen p-4 md:p-8">
+<body class="bg-[#F9FAFB] font-sans antialiased text-gray-900 min-h-screen p-3 md:p-6">
     <div id="toast"></div>
     <div id="note-overlay"></div>
     <div id="note-dialog">
@@ -218,7 +251,7 @@
     <header class="mb-10">
         <h1 class="page-title">Requests</h1>
         <div id="user-pill" class="flex justify-center">
-            <span class="bg-brand/5 text-brand text-[10px] font-black px-3 py-1 rounded-full border border-brand/10 uppercase tracking-widest">
+            <span class="resident-chip text-brand text-xs font-semibold tracking-tight">
                 Fetching Resident Identity...
             </span>
         </div>
@@ -239,7 +272,7 @@
         <!-- Right: History -->
         <div>
             <h2 class="text-xl font-black text-brand mb-4 uppercase tracking-tight">History</h2>
-            <div id="history-container" class="space-y-3">
+            <div id="history-container" class="history-pane space-y-2.5">
                 <div id="history-loader" class="flex flex-col items-center py-20">
                     <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
                     <p class="text-gray-400 text-xs mt-4 font-bold uppercase tracking-tighter">Loading history...</p>
@@ -391,9 +424,26 @@
         const residentName = getResidentName();
         let slotQuota = 3;
         fetchResidentQuota().then((quota) => { slotQuota = quota; });
+
+        const sessionProfileRaw = sessionStorage.getItem('userProfile');
+        const localProfileRaw = localStorage.getItem('userProfile');
+        const activeProfile = sessionProfileRaw ? JSON.parse(sessionProfileRaw) : localProfileRaw ? JSON.parse(localProfileRaw) : null;
+        const residentPhoto = activeProfile ? (
+            activeProfile.photoUrl || activeProfile.photo_url || activeProfile.profilePhoto || activeProfile.profile_photo || activeProfile.avatar || activeProfile.image
+        ) : '';
+        const residentInitials = residentName
+            .split(' ')
+            .filter(Boolean)
+            .slice(0, 2)
+            .map(part => part[0]?.toUpperCase() || '')
+            .join('') || 'R';
+
         document.getElementById('user-pill').innerHTML = `
-            <span class="bg-brand/5 text-brand text-[10px] font-black px-3 py-1 rounded-full border border-brand/10 uppercase tracking-widest">
-                Account: ${residentName}
+            <span class="resident-chip text-brand">
+                ${residentPhoto
+                    ? `<img src="${residentPhoto}" alt="${residentName}" class="resident-avatar border border-brand/20">`
+                    : `<span class="resident-avatar">${residentInitials}</span>`}
+                <span class="text-xs font-black uppercase tracking-wider">${residentName}</span>
             </span>
         `;
 
@@ -527,7 +577,7 @@
         function renderHistoryCard(id, data) {
             const applicantName = data.applicant_name || data.applicant || 'Unknown';
             const status = data.status || 'unknown';
-            const statusColor = status === 'approved' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800';
+            const statusColor = status === 'approved' ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900' : 'bg-rose-50/80 border-rose-200/80 text-rose-900';
             const statusIcon = status === 'approved' ? '✓' : '✗';
             const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
             
@@ -539,27 +589,23 @@
             }) : 'N/A';
 
             const html = `
-                <div id="history-${id}" class="history-card bg-white border rounded-2xl p-4 shadow-sm ${statusColor}">
-                    <div class="flex items-start justify-between mb-2">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-8 h-8 rounded-lg bg-white/80 flex items-center justify-center font-black text-sm">
+                <div id="history-${id}" class="history-card border rounded-2xl px-3 py-2.5 shadow-sm ${statusColor}">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0 flex items-center gap-2.5">
+                            <div class="w-7 h-7 rounded-full bg-white/85 flex items-center justify-center font-black text-[11px]">
                                 ${applicantName.charAt(0)}
                             </div>
-                            <div>
-                                <h4 class="font-bold text-sm leading-none">${applicantName}</h4>
-                                <p class="text-[9px] font-bold uppercase mt-1 opacity-75">${formatSlotId(slotIds)}</p>
+                            <div class="min-w-0">
+                                <h4 class="font-bold text-xs leading-tight truncate">${applicantName}</h4>
+                                <p class="text-[9px] font-bold uppercase mt-0.5 opacity-75">${formatSlotId(slotIds)}</p>
                             </div>
                         </div>
-                        <div class="text-xs font-black uppercase">${statusIcon} ${status}</div>
+                        <div class="text-[10px] font-black uppercase whitespace-nowrap">${statusIcon} ${status}</div>
                     </div>
-                    ${data.requested_location ? `<div class="text-[10px] font-bold uppercase opacity-70">Requested: ${data.requested_location}</div>` : ''}
-                    ${data.Location ? `<div class="text-[10px] font-bold uppercase opacity-70">Confirmed: ${data.Location}</div>` : ''}
-                    ${data.status_message ? `<div class="text-[10px] font-bold uppercase opacity-70">${data.status_message}</div>` : ''}
-                    ${data.note ? `<div class="text-[10px] opacity-70">Applicant Note: ${data.note}</div>` : ''}
-                    ${data.resident_note ? `<div class="text-[10px] opacity-70">Resident Note: ${data.resident_note}</div>` : ''}
-                    <div class="text-[10px] opacity-75 mt-2">
-                        ${timestamp}
-                    </div>
+                    ${data.status_message ? `<div class="text-[10px] font-semibold opacity-75 mt-1.5">${data.status_message}</div>` : ''}
+                    ${data.note ? `<div class="text-[10px] opacity-70 mt-1">Applicant Note: ${data.note}</div>` : ''}
+                    ${data.resident_note ? `<div class="text-[10px] opacity-70 mt-1">Resident Note: ${data.resident_note}</div>` : ''}
+                    <div class="text-[10px] opacity-65 mt-1.5">${timestamp}</div>
                 </div>
             `;
             historyContainer.insertAdjacentHTML('beforeend', html);
