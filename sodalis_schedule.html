@@ -1797,6 +1797,10 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function normalizeTextValue(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
         function render(snap) {
             lastScheduleSnap = snap;
             const snapVal = snap.val() || {};
@@ -1821,10 +1825,14 @@
 
             const counts = {};
             const slotInitialsMap = {};
+            const normalizedCurrentResident = normalizeTextValue(CURRENT_USER_NAME);
 
             Object.values(allRequests).forEach(reqRaw => {
                 const req = normalizeRequest(reqRaw);
-                if (req.resident === CURRENT_USER_NAME && req.status === 'approved' && req.slotIds.length) {
+                const residentMatches = normalizeTextValue(req.resident) === normalizedCurrentResident;
+                const status = normalizeTextValue(req.status);
+                const isApproved = status === 'approved';
+                if (residentMatches && isApproved && req.slotIds.length) {
                     req.slotIds.forEach(slotId => {
                         const id = normalizeSlotId(slotId);
                         const cell = document.getElementById(id);
