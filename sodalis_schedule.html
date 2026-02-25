@@ -819,7 +819,6 @@
         let lastScheduleSnap = null;
         let qrScannerInstance = null;
         let qrScannerRunning = false;
-        let hasInitializedRequestsListener = false;
 
         function toggleControlsPanel() {
             const panel = document.getElementById('controlsPanel');
@@ -1076,13 +1075,12 @@
             return approvedSlots;
         }
 
-        async function lockSlotsFromApprovalEvent(approvedSlots, previousRequests, nextRequests) {
+        async function lockSlotsFromApprovalEvent(approvedSlots, requestsSnapshot) {
             if (!approvedSlots || !approvedSlots.size) return;
 
             const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
             const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
-            const previousApprovedCounts = getApprovedCountsBySlot(previousRequests);
-            const nextApprovedCounts = getApprovedCountsBySlot(nextRequests);
+            const approvedCounts = getApprovedCountsBySlot(requestsSnapshot);
             const scheduleState = (lastScheduleSnap && lastScheduleSnap.val()) || (await db.ref(`schedules/${CURRENT_USER_KEY}`).once('value')).val() || {};
             const storedSlots = (scheduleState.available_slots || []).map(parseStoredSlotValue);
             if (!storedSlots.length) return;
@@ -1094,12 +1092,7 @@
                 const isAutoLock = rawSlot.includes('(u)');
                 if (isManualLock || isAutoLock) return rawSlot;
                 if (!approvedSlots.has(cleanId)) return rawSlot;
-
-                const beforeCount = previousApprovedCounts[cleanId] || 0;
-                const afterCount = nextApprovedCounts[cleanId] || 0;
-                const crossedQuotaByApproval = beforeCount === (activeQuota - 1) && afterCount >= activeQuota;
-                if (!crossedQuotaByApproval) return rawSlot;
-
+                if ((approvedCounts[cleanId] || 0) < activeQuota) return rawSlot;
                 hasChanges = true;
                 return `${cleanId}(u)`;
             });
@@ -2212,19 +2205,13 @@
         // Listen for request changes
         db.ref('requests').on('value', async (snap) => {
             const nextRequests = snap.val() || {};
-
-            if (hasInitializedRequestsListener) {
-                const approvedSlots = getSlotsFromApprovalTransitions(allRequests, nextRequests);
-                try {
-                    await lockSlotsFromApprovalEvent(approvedSlots, allRequests, nextRequests);
-                } catch (error) {
-                    console.warn('Failed to lock slot from approval event', error);
-                }
-            } else {
-                hasInitializedRequestsListener = true;
-            }
-
+            const approvedSlots = getSlotsFromApprovalTransitions(allRequests, nextRequests);
             allRequests = nextRequests;
+            try {
+                await lockSlotsFromApprovalEvent(approvedSlots, nextRequests);
+            } catch (error) {
+                console.warn('Failed to lock slot from approval event', error);
+            }
             if (hasUnsavedChanges) return;
             if (lastScheduleSnap) {
                 render(lastScheduleSnap);

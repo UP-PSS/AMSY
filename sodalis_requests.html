@@ -21,12 +21,12 @@
         .page-title {
             font-family: 'Inter', sans-serif;
             color: #531C79;
-            font-size: clamp(32px, 6vw, 50px);
+            font-size: clamp(32px, 6vw, 42px);
             font-weight: 900;
             text-align: center;
             text-transform: uppercase;
             letter-spacing: -2px;
-            margin: 20px 0 5px 0;
+            margin: 20px 0 30px 0;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -41,11 +41,8 @@
 
         .history-card {
             animation: slideIn 0.3s ease-out forwards;
-        }
-
-        .card-enter h4,
-        .history-card h4 {
-            word-break: break-word;
+            padding: 10px 12px !important;
+            margin-bottom: 8px !important;
         }
 
         #toast {
@@ -170,47 +167,21 @@
 
         .container-layout {
             display: grid;
-            grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
-            gap: 20px;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 10px 20px;
             align-items: start;
         }
 
-        .resident-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            background: white;
-            border: 1px solid rgba(83, 28, 121, 0.15);
-            border-radius: 999px;
-            padding: 7px 14px 7px 8px;
-            box-shadow: 0 8px 20px rgba(83, 28, 121, 0.08);
-        }
-
-        .resident-avatar {
-            width: 34px;
-            height: 34px;
-            border-radius: 999px;
-            background: #531C79;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 800;
-            flex-shrink: 0;
-            object-fit: cover;
-        }
-
         .history-pane {
-            max-height: calc(100vh - 210px);
+            max-height: calc(100vh - 180px);
             overflow-y: auto;
             padding-right: 4px;
         }
 
-        @media (max-width: 1200px) {
+        @media (max-width: 1024px) {
             .container-layout {
                 grid-template-columns: 1fr;
             }
@@ -221,11 +192,6 @@
                 padding: 0 8px;
                 gap: 16px;
             }
-            .card-enter {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
         }
     </style>
 </head>
@@ -233,8 +199,8 @@
     <div id="toast"></div>
     <div id="note-overlay"></div>
     <div id="note-dialog">
-        <div class="dialog-title">Decline Request</div>
-        <div class="dialog-message">Add a note to explain why this request was declined.</div>
+        <div class="dialog-title font-bold text-lg text-brand">Decline Request</div>
+        <div class="dialog-message text-sm text-gray-500">Add a note to explain why this request was declined.</div>
         <textarea id="decline-note" placeholder="Type your note here..."></textarea>
         <div class="note-actions">
             <button class="note-btn note-btn-cancel" onclick="closeDeclineDialog()">Cancel</button>
@@ -248,19 +214,13 @@
         </div>
     </div>
 
-    <header class="mb-10">
+    <header class="mb-4">
         <h1 class="page-title">Requests</h1>
-        <div id="user-pill" class="flex justify-center">
-            <span class="resident-chip text-brand text-xs font-semibold tracking-tight">
-                Fetching Resident Identity...
-            </span>
-        </div>
     </header>
 
     <div class="container-layout">
-        <!-- Left: Pending Requests -->
         <div>
-            <h2 class="text-xl font-black text-brand mb-4 uppercase tracking-tight">Pending Requests</h2>
+            <h2 class="text-xs font-black text-brand mb-4 uppercase tracking-widest opacity-60">Pending Requests</h2>
             <div id="inbox-container" class="space-y-3">
                 <div id="loader" class="flex flex-col items-center py-20">
                     <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
@@ -269,10 +229,9 @@
             </div>
         </div>
 
-        <!-- Right: History -->
         <div>
-            <h2 class="text-xl font-black text-brand mb-4 uppercase tracking-tight">History</h2>
-            <div id="history-container" class="history-pane space-y-2.5">
+            <h2 class="text-xs font-black text-brand mb-4 uppercase tracking-widest opacity-60">History</h2>
+            <div id="history-container" class="history-pane">
                 <div id="history-loader" class="flex flex-col items-center py-20">
                     <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
                     <p class="text-gray-400 text-xs mt-4 font-bold uppercase tracking-tighter">Loading history...</p>
@@ -304,7 +263,6 @@
 
         const MAINTENANCE_ADMIN_EMAILS = ['avpaner@up.edu.ph', 'pnrjr.abl@gmail.com'];
 
-
         function normalizeSettingTitle(value) {
             return (value || '').toString().trim().toLowerCase();
         }
@@ -328,23 +286,11 @@
             }
         }
 
-        // 2. GET RESIDENT NAME FROM STORED USER DATA
         function getResidentName() {
             const sessionProfile = sessionStorage.getItem('userProfile');
             const localProfile = localStorage.getItem('userProfile');
-            
-            let userProfile = null;
-            if (sessionProfile) {
-                userProfile = JSON.parse(sessionProfile);
-            } else if (localProfile) {
-                userProfile = JSON.parse(localProfile);
-            }
-            
-            if (userProfile) {
-                return userProfile.userName || 'Unknown Resident';
-            }
-            
-            return "Unknown Resident";
+            let userProfile = sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
+            return userProfile ? userProfile.userName || 'Unknown Resident' : "Unknown Resident";
         }
         
         function getResidentClassification() {
@@ -356,9 +302,7 @@
 
         function formatSlotId(slotId) {
             if (!slotId) return 'N/A';
-            if (Array.isArray(slotId)) {
-                return formatSlotRange(slotId);
-            }
+            if (Array.isArray(slotId)) return formatSlotRange(slotId);
             if (typeof slotId !== 'string') return 'N/A';
             const parts = getSlotParts(slotId);
             if (!parts) return slotId;
@@ -381,7 +325,7 @@
             if (!slotId || typeof slotId !== 'string') return null;
             const [day, time] = slotId.split('-');
             if (!day || !time) return null;
-            const match = time.match(/(\\d{1,2})(\\d{2})(AM|PM)/i);
+            const match = time.match(/(\d{1,2})(\d{2})(AM|PM)/i);
             if (!match) return null;
             const hour = Number(match[1]);
             const minutes = Number(match[2]);
@@ -425,28 +369,6 @@
         let slotQuota = 3;
         fetchResidentQuota().then((quota) => { slotQuota = quota; });
 
-        const sessionProfileRaw = sessionStorage.getItem('userProfile');
-        const localProfileRaw = localStorage.getItem('userProfile');
-        const activeProfile = sessionProfileRaw ? JSON.parse(sessionProfileRaw) : localProfileRaw ? JSON.parse(localProfileRaw) : null;
-        const residentPhoto = activeProfile ? (
-            activeProfile.photoUrl || activeProfile.photo_url || activeProfile.profilePhoto || activeProfile.profile_photo || activeProfile.avatar || activeProfile.image
-        ) : '';
-        const residentInitials = residentName
-            .split(' ')
-            .filter(Boolean)
-            .slice(0, 2)
-            .map(part => part[0]?.toUpperCase() || '')
-            .join('') || 'R';
-
-        document.getElementById('user-pill').innerHTML = `
-            <span class="resident-chip text-brand">
-                ${residentPhoto
-                    ? `<img src="${residentPhoto}" alt="${residentName}" class="resident-avatar border border-brand/20">`
-                    : `<span class="resident-avatar">${residentInitials}</span>`}
-                <span class="text-xs font-black uppercase tracking-wider">${residentName}</span>
-            </span>
-        `;
-
         // 3. PENDING REQUESTS
         const container = document.getElementById('inbox-container');
         const loader = document.getElementById('loader');
@@ -456,9 +378,9 @@
         onValue(requestsRef, (snapshot) => {
             loader.classList.add('hidden');
             container.innerHTML = "";
-
             const requests = snapshot.val() || {};
             const approvedCounts = {};
+            
             Object.entries(requests).forEach(([, data]) => {
                 if (data.resident === residentName && data.status === 'approved') {
                     const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
@@ -472,11 +394,7 @@
                 .filter(([, data]) => data.resident === residentName && data.status === 'pending');
 
             if (pendingItems.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm">
-                        <p class="text-gray-400 font-bold text-sm uppercase tracking-tight">No pending requests found</p>
-                        <p class="text-gray-300 text-xs mt-1">Check back later or verify the resident name.</p>
-                    </div>`;
+                container.innerHTML = `<div class="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm"><p class="text-gray-400 font-bold text-sm uppercase tracking-tight">No pending requests found</p></div>`;
                 return;
             }
 
@@ -485,129 +403,91 @@
                 const isFull = slotIds.some(slotId => (approvedCounts[slotId] || 0) >= slotQuota);
                 if (slotIds.length && isFull) {
                     const requestRef = ref(db, `requests/${id}`);
-                    update(requestRef, {
-                        status: 'declined',
-                        status_message: 'Declined by System',
-                        resident_note: 'The slot is already full.'
-                    });
+                    update(requestRef, { status: 'declined', status_message: 'Declined by System', resident_note: 'The slot is already full.' });
                     return;
                 }
                 renderRequestCard(id, data);
             });
-        }, (error) => {
-            console.error("Firebase Error:", error);
-            container.innerHTML = `<p class="text-red-500 text-center text-xs">Error connecting to database. Check rules.</p>`;
         });
 
-        // 4. HISTORY (APPROVED & DECLINED)
+        // 4. HISTORY
         const historyContainer = document.getElementById('history-container');
         const historyLoader = document.getElementById('history-loader');
 
         onValue(requestsRef, (snapshot) => {
             historyLoader.classList.add('hidden');
             historyContainer.innerHTML = "";
-
             const historyItems = Object.entries(snapshot.val() || {})
                 .filter(([, data]) => data.resident === residentName && data.status !== 'pending')
                 .map(([id, data]) => ({ id, ...data }));
 
             if (historyItems.length === 0) {
-                historyContainer.innerHTML = `
-                    <div class="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm">
-                        <p class="text-gray-400 font-bold text-sm uppercase tracking-tight">No history yet</p>
-                        <p class="text-gray-300 text-xs mt-1">Approved and declined requests will appear here.</p>
-                    </div>`;
+                historyContainer.innerHTML = `<div class="text-center py-12 bg-white rounded-2xl border border-gray-100"><p class="text-gray-400 font-bold text-xs uppercase tracking-tight">No history yet</p></div>`;
                 return;
             }
 
-            // Sort by timestamp (newest first)
-            historyItems.sort((a, b) => {
-                const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-                const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-                return timeB - timeA;
-            });
-
-            historyItems.forEach(item => {
-                renderHistoryCard(item.id, item);
-            });
-        }, (error) => {
-            console.error("Firebase Error:", error);
-            historyContainer.innerHTML = `<p class="text-red-500 text-center text-xs">Error loading history.</p>`;
+            historyItems.sort((a, b) => (b.timestamp ? new Date(b.timestamp).getTime() : 0) - (a.timestamp ? new Date(a.timestamp).getTime() : 0));
+            historyItems.forEach(item => renderHistoryCard(item.id, item));
         });
 
-        // 5. UI RENDERER FOR PENDING
         function renderRequestCard(id, data) {
             const applicantName = data.applicant_name || data.applicant || 'Applicant';
             const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-            const initials = applicantName
-                .split(' ')
-                .filter(Boolean)
-                .slice(0, 2)
-                .map(part => part[0]?.toUpperCase() || '')
-                .join('') || 'A';
-            const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || data.profile_photo || data.profilePhoto || '';
+            const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || '';
+            const initials = applicantName.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'A';
+            
             const html = `
                 <div id="card-${id}" class="card-enter bg-white border border-brand/10 rounded-2xl p-4 shadow-sm group transition-all hover:border-brand/25">
                     <div class="flex items-center justify-between gap-3">
                         <div class="min-w-0 flex items-center gap-3">
-                            ${applicantPhoto
-                                ? `<img src="${applicantPhoto}" alt="${applicantName}" class="w-10 h-10 rounded-full object-cover border border-brand/20">`
-                                : `<div class="w-10 h-10 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">${initials}</div>`}
+                            ${applicantPhoto 
+                                ? `<img src="${applicantPhoto}" class="w-10 h-10 rounded-full object-cover border border-brand/20">` 
+                                : `<div class="w-10 h-10 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">${initials}</div>`
+                            }
                             <div class="min-w-0">
                                 <h4 class="font-black text-gray-900 text-sm leading-tight break-words">${applicantName}</h4>
                                 <p class="text-[10px] text-brand font-bold uppercase mt-1 tracking-tight">Time Slot: ${formatSlotId(slotIds)}</p>
                             </div>
                         </div>
-
                         <div class="flex items-center gap-2 shrink-0">
-                            <button onclick="processAction('${id}', 'declined')" class="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition cursor-pointer" aria-label="Decline request">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </button>
-                            <button onclick="processAction('${id}', 'approved')" class="p-2 rounded-lg bg-brand text-white hover:shadow-lg hover:shadow-brand/20 active:scale-95 transition cursor-pointer" aria-label="Approve request">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
-                            </button>
+                            <button onclick="processAction('${id}', 'declined')" class="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition cursor-pointer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                            <button onclick="processAction('${id}', 'approved')" class="p-2 rounded-lg bg-brand text-white hover:shadow-lg hover:shadow-brand/20 active:scale-95 transition cursor-pointer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg></button>
                         </div>
                     </div>
-                </div>
-            `;
+                </div>`;
             container.insertAdjacentHTML('beforeend', html);
         }
 
-        // 6. UI RENDERER FOR HISTORY
         function renderHistoryCard(id, data) {
             const applicantName = data.applicant_name || data.applicant || 'Unknown';
             const status = data.status || 'unknown';
-            const statusColor = status === 'approved' ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900' : 'bg-rose-50/80 border-rose-200/80 text-rose-900';
+            const statusColor = status === 'approved' ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900' : 'bg-rose-50/70 border-rose-100 text-rose-900';
             const statusIcon = status === 'approved' ? '✓' : '✗';
             const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-            
-            const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            }) : 'N/A';
+            const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || '';
+            const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
             const html = `
-                <div id="history-${id}" class="history-card border rounded-2xl px-3 py-2.5 shadow-sm ${statusColor}">
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="min-w-0 flex items-center gap-2.5">
-                            <div class="w-7 h-7 rounded-full bg-white/85 flex items-center justify-center font-black text-[11px]">
-                                ${applicantName.charAt(0)}
-                            </div>
+                <div id="history-${id}" class="history-card border rounded-xl shadow-sm ${statusColor}">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="min-w-0 flex items-center gap-2">
+                            ${applicantPhoto 
+                                ? `<img src="${applicantPhoto}" class="w-6 h-6 rounded-full object-cover border border-black/5">`
+                                : `<div class="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center font-black text-[10px] text-brand">${applicantName.charAt(0)}</div>`
+                            }
                             <div class="min-w-0">
-                                <h4 class="font-bold text-xs leading-tight truncate">${applicantName}</h4>
-                                <p class="text-[9px] font-bold uppercase mt-0.5 opacity-75">${formatSlotId(slotIds)}</p>
+                                <h4 class="font-bold text-[11px] leading-tight truncate">${applicantName}</h4>
+                                <p class="text-[9px] font-bold uppercase opacity-60">${formatSlotId(slotIds)}</p>
                             </div>
                         </div>
-                        <div class="text-[10px] font-black uppercase whitespace-nowrap">${statusIcon} ${status}</div>
+                        <div class="text-[9px] font-black uppercase whitespace-nowrap px-1.5 py-0.5 rounded bg-white/40">${statusIcon} ${status}</div>
                     </div>
-                    ${data.status_message ? `<div class="text-[10px] font-semibold opacity-75 mt-1.5">${data.status_message}</div>` : ''}
-                    ${data.note ? `<div class="text-[10px] opacity-70 mt-1">Applicant Note: ${data.note}</div>` : ''}
-                    ${data.resident_note ? `<div class="text-[10px] opacity-70 mt-1">Resident Note: ${data.resident_note}</div>` : ''}
-                    <div class="text-[10px] opacity-65 mt-1.5">${timestamp}</div>
-                </div>
-            `;
+                    <div class="flex justify-between items-center mt-1.5 pt-1.5 border-t border-black/5">
+                        <div class="text-[10px] font-bold opacity-70 truncate">${data.status_message || ''}</div>
+                        <div class="text-[9px] opacity-50 whitespace-nowrap italic ml-4">${timestamp}</div>
+                    </div>
+                    ${data.note ? `<div class="text-[9px] opacity-60 mt-1 italic">Note: ${data.note}</div>` : ''}
+                </div>`;
             historyContainer.insertAdjacentHTML('beforeend', html);
         }
 
@@ -627,67 +507,34 @@
             document.getElementById('note-dialog').style.display = 'block';
         }
 
-        function closeDeclineDialog() {
+        window.closeDeclineDialog = function() {
             pendingDeclineId = null;
             document.getElementById('note-overlay').style.display = 'none';
             document.getElementById('note-dialog').style.display = 'none';
         }
 
-        async function confirmDecline() {
+        window.confirmDecline = async function() {
             const note = document.getElementById('decline-note').value.trim();
-            if (!note) {
-                notify('Please add a note before declining.');
-                return;
-            }
-            if (!pendingDeclineId) return;
+            if (!note) { notify('Please add a note.'); return; }
             const card = document.getElementById(`card-${pendingDeclineId}`);
-            if (card) {
-                card.style.opacity = "0.4";
-                card.style.pointerEvents = "none";
-            }
+            if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
             try {
                 const requestRef = ref(db, `requests/${pendingDeclineId}`);
                 await update(requestRef, { status: 'declined', status_message: 'Declined by Resident', resident_note: note });
                 notify('Request declined.');
-            } catch (err) {
-                console.error("Decline failed:", err);
-                notify('Decline failed.');
-                if (card) {
-                    card.style.opacity = "1";
-                    card.style.pointerEvents = "auto";
-                }
-            } finally {
-                closeDeclineDialog();
-            }
+            } catch (err) { notify('Decline failed.'); if (card) { card.style.opacity = "1"; card.style.pointerEvents = "auto"; } }
+            window.closeDeclineDialog();
         }
 
-        window.closeDeclineDialog = closeDeclineDialog;
-        window.confirmDecline = confirmDecline;
-
-        // 7. FIREBASE UPDATE ACTION
         window.processAction = async (docId, status) => {
-            if (status === 'declined') {
-                openDeclineDialog(docId);
-                return;
-            }
+            if (status === 'declined') { openDeclineDialog(docId); return; }
             const card = document.getElementById(`card-${docId}`);
-            if (card) {
-                card.style.opacity = "0.4";
-                card.style.pointerEvents = "none";
-            }
-            
+            if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
             try {
                 const requestRef = ref(db, `requests/${docId}`);
                 await update(requestRef, { status: status, status_message: 'Approved by Resident' });
                 notify('Request approved.');
-            } catch (err) {
-                console.error("Action failed:", err);
-                notify('Action failed.');
-                if (card) {
-                    card.style.opacity = "1";
-                    card.style.pointerEvents = "auto";
-                }
-            }
+            } catch (err) { notify('Action failed.'); if (card) { card.style.opacity = "1"; card.style.pointerEvents = "auto"; } }
         };
 
         checkMaintenanceSetting();
