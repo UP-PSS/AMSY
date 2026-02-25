@@ -817,6 +817,7 @@
         let USER_QUOTA = 3;
         let isQuotaLoaded = false;
         let lastScheduleSnap = null;
+        let hasLoadedRequestsSnapshot = false;
         let qrScannerInstance = null;
         let qrScannerRunning = false;
 
@@ -2215,6 +2216,17 @@
         // Listen for request changes
         db.ref('requests').on('value', async (snap) => {
             const nextRequests = snap.val() || {};
+            if (!hasLoadedRequestsSnapshot) {
+                hasLoadedRequestsSnapshot = true;
+                allRequests = nextRequests;
+                if (hasUnsavedChanges) return;
+                if (lastScheduleSnap) {
+                    render(lastScheduleSnap);
+                    return;
+                }
+                db.ref(`schedules/${CURRENT_USER_KEY}`).once('value').then(render);
+                return;
+            }
             const approvedSlots = getSlotsFromApprovalTransitions(allRequests, nextRequests);
             allRequests = nextRequests;
             try {
