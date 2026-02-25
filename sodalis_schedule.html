@@ -819,8 +819,6 @@
         let lastScheduleSnap = null;
         let qrScannerInstance = null;
         let qrScannerRunning = false;
-        let lastApprovedCountsBySlot = {};
-        let hasInitializedApprovedCounts = false;
 
         function toggleControlsPanel() {
             const panel = document.getElementById('controlsPanel');
@@ -1036,6 +1034,71 @@
 
         function serializeAvailableSlots(slots) {
             return slots.map(slotId => formatSlotForStorage(slotId));
+        }
+
+        function getApprovedCountsBySlot(requestsMap) {
+            const counts = {};
+            const normalizedCurrentResident = normalizeTextValue(CURRENT_USER_NAME);
+            Object.values(requestsMap || {}).forEach(reqRaw => {
+                const req = normalizeRequest(reqRaw);
+                const residentMatches = normalizeTextValue(req.resident) === normalizedCurrentResident;
+                const isApproved = normalizeTextValue(req.status) === 'approved';
+                if (!residentMatches || !isApproved || !req.slotIds.length) return;
+                req.slotIds.forEach(slotId => {
+                    const cleanId = normalizeSlotId(slotId);
+                    counts[cleanId] = (counts[cleanId] || 0) + 1;
+                });
+            });
+            return counts;
+        }
+
+        function getSlotsFromApprovalTransitions(previousRequests, nextRequests) {
+            const approvedSlots = new Set();
+            const normalizedCurrentResident = normalizeTextValue(CURRENT_USER_NAME);
+
+            Object.keys(nextRequests || {}).forEach(key => {
+                const prevReq = normalizeRequest((previousRequests || {})[key]);
+                const nextReq = normalizeRequest(nextRequests[key]);
+
+                const prevStatus = normalizeTextValue(prevReq.status);
+                const nextStatus = normalizeTextValue(nextReq.status);
+                const residentMatches = normalizeTextValue(nextReq.resident) === normalizedCurrentResident;
+
+                if (!residentMatches) return;
+                if (prevStatus === 'approved' || nextStatus !== 'approved') return;
+
+                nextReq.slotIds.forEach(slotId => {
+                    approvedSlots.add(normalizeSlotId(slotId));
+                });
+            });
+
+            return approvedSlots;
+        }
+
+        async function lockSlotsFromApprovalEvent(approvedSlots, requestsSnapshot) {
+            if (!approvedSlots || !approvedSlots.size) return;
+
+            const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
+            const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
+            const approvedCounts = getApprovedCountsBySlot(requestsSnapshot);
+            const scheduleState = (lastScheduleSnap && lastScheduleSnap.val()) || (await db.ref(`schedules/${CURRENT_USER_KEY}`).once('value')).val() || {};
+            const storedSlots = (scheduleState.available_slots || []).map(parseStoredSlotValue);
+            if (!storedSlots.length) return;
+
+            let hasChanges = false;
+            const nextStoredSlots = storedSlots.map(rawSlot => {
+                const cleanId = normalizeSlotId(rawSlot);
+                const isManualLock = rawSlot.includes('(/)');
+                const isAutoLock = rawSlot.includes('(u)');
+                if (isManualLock || isAutoLock) return rawSlot;
+                if (!approvedSlots.has(cleanId)) return rawSlot;
+                if ((approvedCounts[cleanId] || 0) < activeQuota) return rawSlot;
+                hasChanges = true;
+                return `${cleanId}(u)`;
+            });
+
+            if (!hasChanges) return;
+            await db.ref(`schedules/${CURRENT_USER_KEY}/available_slots`).set(serializeAvailableSlots(nextStoredSlots));
         }
 
         function build() {
@@ -1825,7 +1888,7 @@
                 s.innerHTML = '';
             });
 
-            const counts = {};
+            const counts = getApprovedCountsBySlot(allRequests);
             const slotInitialsMap = {};
             const normalizedCurrentResident = normalizeTextValue(CURRENT_USER_NAME);
 
@@ -1839,7 +1902,6 @@
                         const id = normalizeSlotId(slotId);
                         const cell = document.getElementById(id);
                         if (cell) {
-                            counts[id] = (counts[id] || 0) + 1;
                             const initials = req.applicant ? req.applicant.split(' ').map(n => n[0]).join('') : 'N/A';
                             if (!slotInitialsMap[id]) slotInitialsMap[id] = [];
                             slotInitialsMap[id].push(initials);
@@ -1858,19 +1920,17 @@
                 cell.innerHTML += `<div class="mobile-count">${initialsList.length}</div>`;
             });
 
-            const resolvedQuota = Number.isFinite(USER_QUOTA) && USER_QUOTA > 0 ? USER_QUOTA : 3;
-            const activeQuota = isQuotaLoaded ? resolvedQuota : 3;
-
-            const quotaLockedSlots = new Set();
+            const quotaLockedSlots = new Set(
+                userSchedule
+                    .filter(slot => (slot || '').includes('(u)'))
+                    .map(slot => parseStoredSlotValue(slot).replace('(/)', '').replace('(u)', '').trim())
+            );
             userSchedule.forEach(raw => {
                 const clean = raw.replace("(/)", "").replace("(u)", "").trim();
                 const el = document.getElementById(clean);
                 if (el) {
                     const isManuallyLocked = manualLockedSlots.has(clean);
-                    const isQuotaLocked = (counts[clean] || 0) >= activeQuota;
-                    if (isQuotaLocked) {
-                        quotaLockedSlots.add(clean);
-                    }
+                    const isQuotaLocked = quotaLockedSlots.has(clean);
                     const isLocked = isManuallyLocked || isQuotaLocked;
                     if (isLocked) {
                         el.classList.add('locked');
@@ -2144,8 +2204,15 @@
         });
 
         // Listen for request changes
-        db.ref('requests').on('value', (snap) => {
-            allRequests = snap.val() || {};
+        db.ref('requests').on('value', async (snap) => {
+            const nextRequests = snap.val() || {};
+            const approvedSlots = getSlotsFromApprovalTransitions(allRequests, nextRequests);
+            allRequests = nextRequests;
+            try {
+                await lockSlotsFromApprovalEvent(approvedSlots, nextRequests);
+            } catch (error) {
+                console.warn('Failed to lock slot from approval event', error);
+            }
             if (hasUnsavedChanges) return;
             if (lastScheduleSnap) {
                 render(lastScheduleSnap);
