@@ -590,7 +590,7 @@
     <div id="confirm-overlay"></div>
     <div id="qr-dialog">
         <div class="dialog-title">Scan QR Code</div>
-        <div class="dialog-message">Scan an applicant QR code with format <strong>https://t.ly/&lt;code&gt;</strong>.</div>
+        <div class="dialog-message">Scan an applicant QR code.</div>
         <div id="qr-reader"></div>
         <div class="dialog-actions" style="margin-top:12px;">
             <button class="dialog-btn dialog-btn-cancel" onclick="closeQrScanner()">Close</button>
@@ -1163,7 +1163,7 @@
         }
 
         async function handleQrCodeDecoded(decodedText) {
-            const prefix = 'https://t.ly/';
+            const prefix = 't.ly/';
             if (!decodedText || !decodedText.startsWith(prefix)) {
                 return;
             }
