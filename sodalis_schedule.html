@@ -1093,7 +1093,7 @@
                 if (!approvedSlots.has(cleanId)) return rawSlot;
                 if ((approvedCounts[cleanId] || 0) < activeQuota) return rawSlot;
                 hasChanges = true;
-                return `${cleanId}(u)`;
+                return `${cleanId}(/)`;
             });
 
             if (!hasChanges) return;
