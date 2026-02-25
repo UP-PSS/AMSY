@@ -980,7 +980,6 @@
         function formatSlotForStorage(slotId) {
             if (!slotId) return slotId;
             const isLocked = slotId.includes("(/)");
-            const isAutoLocked = slotId.includes("(u)");
             const clean = slotId.replace("(/)", "").replace("(u)", "");
             const parts = clean.split('-');
             if (parts.length < 2) return slotId;
@@ -989,7 +988,7 @@
             if (!timeSlot) return slotId;
             const dayLabel = (DAY_NAME_LOOKUP[day.toUpperCase()] || day).toUpperCase();
             const display = `${dayLabel} - ${timeSlot.start}`;
-            return isLocked ? `${display}(/)` : isAutoLocked ? `${display}(u)` : display;
+            return isLocked ? `${display}(/)` : display;
         }
 
         // Used only for comparison, not display or storage
