@@ -1180,8 +1180,8 @@
             try {
                 const { data, error } = await supabaseClient
                     .from('Applicants')
-                    .select('*')
-                    .or(`Code.eq.${applicantCode},code.eq.${applicantCode}`)
+                    .select('code, full_name')
+                    .or(`code.eq.${applicantCode}`)
                     .limit(1);
                 if (error) {
                     throw error;
