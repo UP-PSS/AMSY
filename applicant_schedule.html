@@ -28,11 +28,14 @@
         .filter-panel { background: white; border-bottom: 1px solid var(--border); z-index: 100; }
         .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; }
         .panel-controls { display: flex; align-items: center; gap: 8px; }
-        .counter-pill { border: 1px solid var(--border); background: #fff; color: var(--primary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; }
         .panel-title { font-size: 11px; font-weight: 900; color: var(--primary); text-transform: uppercase; letter-spacing: 0.08em; }
         .collapse-toggle { border: 1px solid var(--border); background: #fff; color: var(--primary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
         .filter-container { background: white; padding: 18px 20px; border-top: 1px solid var(--border); }
         .filter-panel.collapsed .filter-container { display: none; }
+        .summary-counters { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; padding: 14px 18px; background: #fff; border-bottom: 1px solid var(--border); }
+        .counter-pill { border: none; border-radius: 16px; padding: 12px 20px; font-size: 18px; font-weight: 900; letter-spacing: 0.01em; color: #fff; box-shadow: 0 10px 24px rgba(30, 41, 59, 0.14); white-space: nowrap; }
+        .counter-pill-quota { background: linear-gradient(135deg, #531C79, #7C3AED); }
+        .counter-pill-requests { background: linear-gradient(135deg, #C2185B, #EC4899); }
         .filter-grid { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 1200px; margin: 0 auto; }
         .filter-group { display: flex; flex-direction: column; gap: 4px; }
         .filter-group label { font-size: 12px; font-weight: 900; color: var(--primary); text-transform: uppercase; margin-bottom: 2px; }
@@ -183,6 +186,8 @@
             body { overflow: auto; }
             .panel-header { flex-direction: column; align-items: stretch; gap: 6px; }
             .panel-controls { justify-content: flex-end; flex-wrap: wrap; }
+            .summary-counters { padding: 10px 12px; gap: 8px; }
+            .counter-pill { width: 100%; text-align: center; font-size: 15px; padding: 10px 14px; border-radius: 12px; }
             .table-container { overflow: auto; }
             table { min-width: 0; width: 100%; border-spacing: 1px; }
             thead th { font-size: 9px; padding: 4px 0; }
@@ -205,8 +210,6 @@
         <div class="panel-header">
             <span class="panel-title">Filters</span>
             <div class="panel-controls">
-                <span class="counter-pill" id="requestsSentCounter">Requests Sent: 0</span>
-                <span class="counter-pill" id="quotaCounter">Quota: 0/0</span>
                 <button class="collapse-toggle" id="filterToggleBtn" onclick="toggleFilterPanel()">Hide</button>
             </div>
         </div>
@@ -227,6 +230,11 @@
             <div id="resident-card-container"></div>
             <div id="resident-selection"></div>
         </div>
+    </div>
+
+    <div class="summary-counters">
+        <span class="counter-pill counter-pill-requests" id="requestsSentCounter">Requests Sent: 0</span>
+        <span class="counter-pill counter-pill-quota" id="quotaCounter">Quota Left: 0/0</span>
     </div>
 
     <div id="action-bar">
@@ -382,11 +390,17 @@
 
         function updateCounters(allRequests = currentAllRequests) {
             const sentStatuses = new Set(['pending', 'approved', 'completed']);
-            const sentCount = Object.values(allRequests || {}).filter(req =>
+            const completedStatuses = new Set(['completed']);
+            const requestList = Object.values(allRequests || {});
+            const sentCount = requestList.filter(req =>
                 req?.applicant_name === currentUser && sentStatuses.has((req.status || '').toLowerCase())
             ).length;
+            const completedCount = requestList.filter(req =>
+                req?.applicant_name === currentUser && completedStatuses.has((req.status || '').toLowerCase())
+            ).length;
+            const quotaLeft = Math.max(applicantQuota - completedCount, 0);
             document.getElementById('requestsSentCounter').textContent = `Requests Sent: ${sentCount}`;
-            document.getElementById('quotaCounter').textContent = `Quota: ${sentCount}/${applicantQuota}`;
+            document.getElementById('quotaCounter').textContent = `Quota Left: ${quotaLeft}/${applicantQuota}`;
         }
 
         function getResidentFacebookLink() {
@@ -411,9 +425,7 @@
         }
 
         function resolveApplicantQuota() {
-            const classification = (getLoggedInUserClassification() || '').toString().trim().toLowerCase();
-            if (!classification) return 3;
-            const settingMatch = Object.entries(settings).find(([title]) => (title || '').toString().trim().toLowerCase() === classification);
+            const settingMatch = Object.entries(settings).find(([title]) => (title || '').toString().trim().toLowerCase() === 'quota');
             const parsedQuota = settingMatch ? Number(settingMatch[1]) : NaN;
             return Number.isFinite(parsedQuota) && parsedQuota > 0 ? parsedQuota : 3;
         }
@@ -625,7 +637,7 @@
 
                 const acceptedCount = approvedCountMap[el.id] || 0;
                 if (acceptedCount > 0) {
-                    el.insertAdjacentHTML('beforeend', `<span class="slot-counter" title="Accepted applicants">${acceptedCount}</span>`);
+                    el.insertAdjacentHTML('beforeend', `<span class="slot-counter" title="Approved applicants">${acceptedCount}</span>`);
                 }
             });
         }
