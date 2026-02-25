@@ -1166,6 +1166,7 @@
             if (!decodedText) {
                 return '';
             }
+        }
 
             const qrText = decodedText.trim();
             const normalizedText = qrText.toLowerCase();
@@ -1207,7 +1208,20 @@
                 if (error) {
                     throw error;
                 }
-                const applicantRow = (data || [])[0];
+
+                const normalizedScannedCode = normalizeApplicantCode(applicantCode);
+                const applicantRow = (data || []).find((row) => {
+                    const candidateCodes = [
+                        row.code,
+                        row.Code,
+                        row.applicant_code,
+                        row.applicantCode,
+                        row['Applicant code'],
+                        row['Applicant Code']
+                    ];
+                    return candidateCodes.some((candidate) => normalizeApplicantCode(candidate) === normalizedScannedCode);
+                });
+
                 if (!applicantRow) {
                     alert('Applicant code not found.');
                     return;
