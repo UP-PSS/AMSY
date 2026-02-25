@@ -1943,7 +1943,6 @@
                 }
             });
             autoLockedSlots = quotaLockedSlots;
-            syncAutoLockedSlots(snapVal.available_slots || [], quotaLockedSlots);
             missingClassSlots.forEach(slotId => {
                 const el = document.getElementById(slotId);
                 if (el) {
