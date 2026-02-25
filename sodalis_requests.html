@@ -41,8 +41,9 @@
 
         .history-card {
             animation: slideIn 0.3s ease-out forwards;
-            padding: 10px 12px !important;
+            padding: 12px 14px !important;
             margin-bottom: 8px !important;
+            transition: transform 0.2s ease;
         }
 
         #toast {
@@ -167,7 +168,7 @@
 
         .container-layout {
             display: grid;
-            grid-template-columns: 1fr 360px;
+            grid-template-columns: 1fr 380px;
             gap: 24px;
             max-width: 1200px;
             margin: 0 auto;
@@ -220,21 +221,21 @@
 
     <div class="container-layout">
         <div>
-            <h2 class="text-xs font-black text-brand mb-4 uppercase tracking-widest opacity-60">Pending Requests</h2>
+            <h2 class="text-[10px] font-black text-brand mb-4 uppercase tracking-[0.2em] opacity-50">Pending Inbox</h2>
             <div id="inbox-container" class="space-y-3">
                 <div id="loader" class="flex flex-col items-center py-20">
                     <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
-                    <p class="text-gray-400 text-xs mt-4 font-bold uppercase tracking-tighter">Syncing with Firebase...</p>
+                    <p class="text-gray-400 text-[10px] mt-4 font-bold uppercase tracking-widest">Syncing with Firebase...</p>
                 </div>
             </div>
         </div>
 
         <div>
-            <h2 class="text-xs font-black text-brand mb-4 uppercase tracking-widest opacity-60">History</h2>
+            <h2 class="text-[10px] font-black text-brand mb-4 uppercase tracking-[0.2em] opacity-50">Recent History</h2>
             <div id="history-container" class="history-pane">
                 <div id="history-loader" class="flex flex-col items-center py-20">
                     <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
-                    <p class="text-gray-400 text-xs mt-4 font-bold uppercase tracking-tighter">Loading history...</p>
+                    <p class="text-gray-400 text-[10px] mt-4 font-bold uppercase tracking-widest">Loading history...</p>
                 </div>
             </div>
         </div>
@@ -461,32 +462,45 @@
         function renderHistoryCard(id, data) {
             const applicantName = data.applicant_name || data.applicant || 'Unknown';
             const status = data.status || 'unknown';
-            const statusColor = status === 'approved' ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900' : 'bg-rose-50/70 border-rose-100 text-rose-900';
-            const statusIcon = status === 'approved' ? '✓' : '✗';
+            
+            // Logic for readability & status text
+            let statusDisplay = status;
+            let statusTextClass = "text-gray-900";
+            let statusBg = "bg-white border-gray-200";
+
+            if (status === 'approved') {
+                statusBg = "bg-emerald-50/70 border-emerald-100";
+                statusTextClass = "text-emerald-900";
+            } else if (status === 'declined' || status === 'cancelled') {
+                statusBg = "bg-rose-50/70 border-rose-100";
+                statusTextClass = "text-rose-900";
+            }
+
+            const statusIcon = status === 'approved' ? '✓' : (status === 'cancelled' ? '○' : '✗');
             const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
             const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || '';
             const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
             const html = `
-                <div id="history-${id}" class="history-card border rounded-xl shadow-sm ${statusColor}">
+                <div id="history-${id}" class="history-card border rounded-xl shadow-sm ${statusBg}">
                     <div class="flex items-center justify-between gap-2">
-                        <div class="min-w-0 flex items-center gap-2">
+                        <div class="min-w-0 flex items-center gap-2.5">
                             ${applicantPhoto 
-                                ? `<img src="${applicantPhoto}" class="w-6 h-6 rounded-full object-cover border border-black/5">`
-                                : `<div class="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center font-black text-[10px] text-brand">${applicantName.charAt(0)}</div>`
+                                ? `<img src="${applicantPhoto}" class="w-7 h-7 rounded-full object-cover border border-black/5">`
+                                : `<div class="w-7 h-7 rounded-full bg-white/80 flex items-center justify-center font-black text-[10px] text-brand">${applicantName.charAt(0)}</div>`
                             }
                             <div class="min-w-0">
-                                <h4 class="font-bold text-[11px] leading-tight truncate">${applicantName}</h4>
-                                <p class="text-[9px] font-bold uppercase opacity-60">${formatSlotId(slotIds)}</p>
+                                <h4 class="font-bold text-[12px] text-gray-900 leading-tight truncate">${applicantName}</h4>
+                                <p class="text-[9px] font-black uppercase opacity-40 tracking-tighter">${formatSlotId(slotIds)}</p>
                             </div>
                         </div>
-                        <div class="text-[9px] font-black uppercase whitespace-nowrap px-1.5 py-0.5 rounded bg-white/40">${statusIcon} ${status}</div>
+                        <div class="text-[9px] font-black uppercase whitespace-nowrap px-2 py-0.5 rounded bg-white/50 ${statusTextClass}">${statusIcon} ${status}</div>
                     </div>
-                    <div class="flex justify-between items-center mt-1.5 pt-1.5 border-t border-black/5">
-                        <div class="text-[10px] font-bold opacity-70 truncate">${data.status_message || ''}</div>
-                        <div class="text-[9px] opacity-50 whitespace-nowrap italic ml-4">${timestamp}</div>
+                    <div class="flex justify-between items-center mt-2 pt-2 border-t border-black/5">
+                        <div class="text-[10px] font-black text-gray-700 uppercase tracking-tight truncate">${data.status_message || ''}</div>
+                        <div class="text-[9px] font-bold text-gray-400 whitespace-nowrap uppercase tracking-tighter ml-4">${timestamp}</div>
                     </div>
-                    ${data.note ? `<div class="text-[9px] opacity-60 mt-1 italic">Note: ${data.note}</div>` : ''}
+                    ${data.note ? `<div class="text-[10px] text-gray-500 mt-1.5 italic font-medium leading-relaxed">Note: ${data.note}</div>` : ''}
                 </div>`;
             historyContainer.insertAdjacentHTML('beforeend', html);
         }
@@ -520,7 +534,11 @@
             if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
             try {
                 const requestRef = ref(db, `requests/${pendingDeclineId}`);
-                await update(requestRef, { status: 'declined', status_message: 'Declined by Resident', resident_note: note });
+                await update(requestRef, { 
+                    status: 'declined', 
+                    status_message: 'Declined by Sodalis', 
+                    resident_note: note 
+                });
                 notify('Request declined.');
             } catch (err) { notify('Decline failed.'); if (card) { card.style.opacity = "1"; card.style.pointerEvents = "auto"; } }
             window.closeDeclineDialog();
@@ -532,8 +550,9 @@
             if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
             try {
                 const requestRef = ref(db, `requests/${docId}`);
-                await update(requestRef, { status: status, status_message: 'Approved by Resident' });
-                notify('Request approved.');
+                const message = status === 'approved' ? 'Approved by Sodalis' : 'Cancelled by Sodalis';
+                await update(requestRef, { status: status, status_message: message });
+                notify(`Request ${status}.`);
             } catch (err) { notify('Action failed.'); if (card) { card.style.opacity = "1"; card.style.pointerEvents = "auto"; } }
         };
 
