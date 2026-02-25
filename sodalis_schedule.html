@@ -1188,6 +1188,11 @@
             return qrText;
         }
 
+        function normalizeApplicantCode(code) {
+            if (!code) return '';
+            return code.toString().trim().toLowerCase();
+        }
+
         async function handleQrCodeDecoded(decodedText) {
             const applicantCode = extractApplicantCodeFromQr(decodedText);
             if (!applicantCode) {
