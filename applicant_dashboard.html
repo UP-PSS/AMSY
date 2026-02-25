@@ -331,7 +331,7 @@
 
         function resolveIframe(iframe, category) {
             if (iframe === 'home.html') {
-                return category === 'Applicant' ? 'home_a.html' : 'home_r.html';
+                return category === 'Applicant' ? 'applicant_home.html' : 'sodalis_home.html';
             }
             return iframe;
         }
@@ -358,7 +358,7 @@
                     { menuname: 'Homepage', iframe: 'home.html', category: 'Applicant' },
                     { menuname: 'Calendar', iframe: 'calendar.html', category: 'Applicant' },
                     { menuname: 'Schedule', iframe: 'schedule_booking.html', category: 'Applicant' },
-                    { menuname: 'Requests', iframe: 'notifications.html', category: 'Applicant' }
+                    { menuname: 'Requests', iframe: 'applicant_schedule.html', category: 'Applicant' }
                 ];
             }
 
