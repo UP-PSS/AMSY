@@ -1801,30 +1801,6 @@
             return (value || '').toString().trim().toLowerCase();
         }
 
-
-        function syncAutoLockedSlots(snapshotSlots, quotaLockedSlots) {
-            if (hasUnsavedChanges) return;
-            const rawSlots = Array.isArray(snapshotSlots) ? snapshotSlots : [];
-            const normalizedSlots = rawSlots.map(parseStoredSlotValue);
-            const desiredSlots = normalizedSlots.map(slotId => {
-                const clean = slotId.replace("(/)", "").replace("(u)", "").trim();
-                if (manualLockedSlots.has(clean)) {
-                    return `${clean}(/)`;
-                }
-                if (quotaLockedSlots.has(clean)) {
-                    return `${clean}(u)`;
-                }
-                return clean;
-            });
-
-            const changed = desiredSlots.length !== normalizedSlots.length
-                || desiredSlots.some((slot, index) => slot !== normalizedSlots[index]);
-
-            if (changed) {
-                db.ref(`schedules/${CURRENT_USER_KEY}/available_slots`).set(serializeAvailableSlots(desiredSlots));
-            }
-        }
-
         function render(snap) {
             lastScheduleSnap = snap;
             const snapVal = snap.val() || {};
