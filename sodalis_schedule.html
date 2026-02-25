@@ -819,6 +819,8 @@
         let lastScheduleSnap = null;
         let qrScannerInstance = null;
         let qrScannerRunning = false;
+        let lastApprovedCountsBySlot = {};
+        let hasInitializedApprovedCounts = false;
 
         function toggleControlsPanel() {
             const panel = document.getElementById('controlsPanel');
