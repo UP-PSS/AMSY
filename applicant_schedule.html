@@ -32,10 +32,11 @@
         .collapse-toggle { border: 1px solid var(--border); background: #fff; color: var(--primary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
         .filter-container { background: white; padding: 18px 20px; border-top: 1px solid var(--border); }
         .filter-panel.collapsed .filter-container { display: none; }
-        .summary-counters { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; padding: 14px 18px; background: #fff; border-bottom: 1px solid var(--border); }
-        .counter-pill { border: none; border-radius: 16px; padding: 12px 20px; font-size: 18px; font-weight: 900; letter-spacing: 0.01em; color: #fff; box-shadow: 0 10px 24px rgba(30, 41, 59, 0.14); white-space: nowrap; }
-        .counter-pill-quota { background: linear-gradient(135deg, #531C79, #7C3AED); }
-        .counter-pill-requests { background: linear-gradient(135deg, #C2185B, #EC4899); }
+        .summary-counters { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 12px 18px; background: #fff; border-bottom: 1px solid var(--border); }
+        .counter-pill { border: 1px solid #D6DCE5; border-radius: 12px; padding: 8px 14px; font-size: 14px; font-weight: 700; letter-spacing: 0; color: #334155; white-space: nowrap; transition: opacity 0.2s ease; }
+        .counter-pill.loading { opacity: 0.75; }
+        .counter-pill-quota { background: #F1E8FA; color: #531C79; border-color: #D8C2EA; }
+        .counter-pill-requests { background: #FDEAF2; color: #9D174D; border-color: #F4BDD5; }
         .filter-grid { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 1200px; margin: 0 auto; }
         .filter-group { display: flex; flex-direction: column; gap: 4px; }
         .filter-group label { font-size: 12px; font-weight: 900; color: var(--primary); text-transform: uppercase; margin-bottom: 2px; }
@@ -186,8 +187,8 @@
             body { overflow: auto; }
             .panel-header { flex-direction: column; align-items: stretch; gap: 6px; }
             .panel-controls { justify-content: flex-end; flex-wrap: wrap; }
-            .summary-counters { padding: 10px 12px; gap: 8px; }
-            .counter-pill { width: 100%; text-align: center; font-size: 15px; padding: 10px 14px; border-radius: 12px; }
+            .summary-counters { padding: 10px 12px; gap: 8px; justify-content: flex-start; }
+            .counter-pill { width: auto; text-align: center; font-size: 13px; padding: 7px 12px; border-radius: 10px; }
             .table-container { overflow: auto; }
             table { min-width: 0; width: 100%; border-spacing: 1px; }
             thead th { font-size: 9px; padding: 4px 0; }
@@ -233,8 +234,8 @@
     </div>
 
     <div class="summary-counters">
-        <span class="counter-pill counter-pill-requests" id="requestsSentCounter">Requests Sent: 0</span>
-        <span class="counter-pill counter-pill-quota" id="quotaCounter">Quota Left: 0/0</span>
+        <span class="counter-pill counter-pill-requests" id="requestsSentCounter">Requests Sent: —</span>
+        <span class="counter-pill counter-pill-quota" id="quotaCounter">Quota Left: —</span>
     </div>
 
     <div id="action-bar">
@@ -292,8 +293,11 @@
         let currentAvailableSlots = [];
         let currentAllRequests = {};
         let applicantQuota = 3;
+        let hasLoadedRequests = false;
+        let isRequestsLoading = false;
 
         function detachResidentListeners() {
+            isRequestsLoading = false;
             if (currentScheduleRef) {
                 currentScheduleRef.off();
                 currentScheduleRef = null;
@@ -308,7 +312,6 @@
             activeReq = null;
             selectedSlotIds = [];
             document.getElementById('action-bar').style.display = 'none';
-            updateCounters({});
 
             document.querySelectorAll('.slot').forEach(el => {
                 el.className = 'slot unavailable';
@@ -388,7 +391,29 @@
             return '';
         }
 
-        function updateCounters(allRequests = currentAllRequests) {
+        function updateCounters(allRequests = currentAllRequests, options = {}) {
+            const { forcePlaceholder = false, loading = false } = options;
+            const requestsSentCounter = document.getElementById('requestsSentCounter');
+            const quotaCounter = document.getElementById('quotaCounter');
+            const loadingActive = loading || isRequestsLoading;
+
+            requestsSentCounter.classList.toggle('loading', loadingActive);
+            quotaCounter.classList.toggle('loading', loadingActive);
+
+            if (forcePlaceholder) {
+                requestsSentCounter.textContent = 'Requests Sent: —';
+                quotaCounter.textContent = 'Quota Left: —';
+                return;
+            }
+
+            if (loadingActive) return;
+
+            if (!hasLoadedRequests) {
+                requestsSentCounter.textContent = 'Requests Sent: —';
+                quotaCounter.textContent = 'Quota Left: —';
+                return;
+            }
+
             const sentStatuses = new Set(['pending', 'approved', 'completed']);
             const completedStatuses = new Set(['completed']);
             const requestList = Object.values(allRequests || {});
@@ -399,8 +424,8 @@
                 req?.applicant_name === currentUser && completedStatuses.has((req.status || '').toLowerCase())
             ).length;
             const quotaLeft = Math.max(applicantQuota - completedCount, 0);
-            document.getElementById('requestsSentCounter').textContent = `Requests Sent: ${sentCount}`;
-            document.getElementById('quotaCounter').textContent = `Quota Left: ${quotaLeft}/${applicantQuota}`;
+            requestsSentCounter.textContent = `Requests Sent: ${sentCount}`;
+            quotaCounter.textContent = `Quota Left: ${quotaLeft}/${applicantQuota}`;
         }
 
         function getResidentFacebookLink() {
@@ -442,7 +467,7 @@
             residents = resData || [];
             setData?.forEach(s => settings[s.Settingtitle] = parseFloat(s.Number));
             applicantQuota = resolveApplicantQuota();
-            updateCounters({});
+            updateCounters({}, { forcePlaceholder: true });
 
             onFilterTypeChange();
             applyFocusedRequestFilters();
@@ -531,7 +556,6 @@
             currentAvailableSlots = [];
             currentAllRequests = {};
             clearGridToBlank();
-            updateCounters({});
             document.getElementById('resident-card-container').innerHTML = '';
             document.getElementById('resident-card-container').style.display = 'none';
             residentSelection.style.display = 'none';
@@ -566,7 +590,6 @@
             currentAvailableSlots = [];
             currentAllRequests = {};
             clearGridToBlank();
-            updateCounters({});
             container.innerHTML = '';
             residentSelection.style.display = 'none';
             residentSelection.textContent = '';
@@ -618,8 +641,11 @@
             durationHours = settings[`Hours_${selectedRes.classification}`] || 0.5;
             currentAvailableSlots = [];
             currentAllRequests = {};
+            isRequestsLoading = true;
             clearGridToBlank();
+            updateCounters(currentAllRequests, { loading: true });
 
+            let hasSeenFirstRequestSnapshot = false;
             const resKey = name.replace(/[.#$\[\]]/g, '_');
             currentScheduleRef = db.ref(`schedules/${resKey}`);
             currentRequestsRef = db.ref('requests');
@@ -631,6 +657,12 @@
 
             currentRequestsRef.on('value', reqSnap => {
                 currentAllRequests = reqSnap.val() || {};
+                if (!hasSeenFirstRequestSnapshot) {
+                    hasSeenFirstRequestSnapshot = true;
+                    hasLoadedRequests = true;
+                    isRequestsLoading = false;
+                    updateCounters(currentAllRequests);
+                }
                 renderGrid(currentAvailableSlots, currentAllRequests);
             });
         }
