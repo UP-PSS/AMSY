@@ -729,7 +729,7 @@
                 btns.innerHTML = `<span style="font-size:11px; font-weight:800; opacity:0.8;">SESSION ENDED</span>`;
             } else if (req.status === 'approved') {
                 msg.innerText = "Appointment Approved!";
-                btns.innerHTML = `<button class="btn-act" style="background:white; color:var(--primary)" onclick="toast('Help: Rescheduling is admin-only')">HELP</button>`;
+                btns.innerHTML = `<span style="font-size:11px; font-weight:800; opacity:0.8;">AWAITING SESSION</span>`;
             } else {
                 msg.innerText = "Status: " + req.status.toUpperCase();
                 btns.innerHTML = `<button class="btn-act" style="background:#FF5252; color:white" onclick="withdraw()">WITHDRAW</button>`;
