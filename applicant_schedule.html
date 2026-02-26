@@ -445,6 +445,7 @@
             updateCounters({});
 
             onFilterTypeChange();
+            applyFocusedRequestFilters();
         }
 
         function buildGrid() {
@@ -476,6 +477,47 @@
 
         function getCommitteeValue(resident) {
             return resident.committee || resident.Committee || resident.committee_name || resident.committeeName || '';
+        }
+
+        function consumeFocusedRequest() {
+            const raw = sessionStorage.getItem('applicantScheduleFocusRequest');
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function applyFocusedRequestFilters() {
+            const focus = consumeFocusedRequest();
+            if (!focus || !focus.resident) return;
+
+            const targetResident = residents.find(r => (r.full_name || '').trim() === focus.resident.trim());
+            if (!targetResident) return;
+
+            const filterTypeInput = document.querySelector('input[name="filterType"][value="classification"]');
+            if (filterTypeInput) {
+                filterTypeInput.checked = true;
+            }
+            onFilterTypeChange();
+
+            const classSelect = document.getElementById('sel-class');
+            if (classSelect) {
+                classSelect.value = targetResident.classification || '';
+                onClassChange();
+            }
+
+            if (targetResident.full_name) {
+                selectRes(targetResident.full_name);
+                const slots = Array.isArray(focus.slot_ids) ? focus.slot_ids : (focus.slot_id ? [focus.slot_id] : []);
+                if (slots.length) {
+                    document.getElementById('slot-info').innerText = `Focused Request: ${slots.join(' | ')}`;
+                }
+                toast(`Focused request loaded for ${targetResident.full_name}`);
+            }
+
+            sessionStorage.removeItem('applicantScheduleFocusRequest');
         }
 
         function onFilterTypeChange() {
