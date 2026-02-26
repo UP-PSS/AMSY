@@ -7,6 +7,7 @@
     
     <link rel="preconnect" href="https://rsms.me/">
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
     
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -198,16 +199,6 @@
 </head>
 <body class="bg-[#F9FAFB] font-sans antialiased text-gray-900 min-h-screen p-3 md:p-6">
     <div id="toast"></div>
-    <div id="note-overlay"></div>
-    <div id="note-dialog">
-        <div class="dialog-title font-bold text-lg text-brand">Decline Request</div>
-        <div class="dialog-message text-sm text-gray-500">Add a note to explain why this request was declined.</div>
-        <textarea id="decline-note" placeholder="Type your note here..."></textarea>
-        <div class="note-actions">
-            <button class="note-btn note-btn-cancel" onclick="closeDeclineDialog()">Cancel</button>
-            <button class="note-btn note-btn-confirm" onclick="confirmDecline()">Submit</button>
-        </div>
-    </div>
     <div class="maintenance-overlay" id="maintenanceOverlay">
         <div class="maintenance-card">
             <h2>Website Under Maintenance</h2>
@@ -432,27 +423,35 @@
         });
 
         function renderRequestCard(id, data) {
-            const applicantName = data.applicant_name || data.applicant || 'Applicant';
+            const residentName = data.resident || data.resident_name || 'Resident';
             const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-            const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || '';
-            const initials = applicantName.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'A';
+            const residentPhoto = data.resident_photo || data.residentPhoto || '';
+            const initials = residentName.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'R';
+            const encodedRequest = encodeURIComponent(JSON.stringify({
+                id,
+                resident: residentName,
+                slot_ids: slotIds,
+                slot_id: data.slot_id || slotIds[0] || ''
+            }));
             
             const html = `
                 <div id="card-${id}" class="card-enter bg-white border border-brand/10 rounded-2xl p-4 shadow-sm group transition-all hover:border-brand/25">
                     <div class="flex items-center justify-between gap-3">
                         <div class="min-w-0 flex items-center gap-3">
-                            ${applicantPhoto 
-                                ? `<img src="${applicantPhoto}" class="w-10 h-10 rounded-full object-cover border border-brand/20">` 
+                            ${residentPhoto 
+                                ? `<img src="${residentPhoto}" class="w-10 h-10 rounded-full object-cover border border-brand/20">` 
                                 : `<div class="w-10 h-10 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">${initials}</div>`
                             }
                             <div class="min-w-0">
-                                <h4 class="font-black text-gray-900 text-sm leading-tight break-words">${applicantName}</h4>
+                                <h4 class="font-black text-gray-900 text-sm leading-tight break-words">${residentName}</h4>
                                 <p class="text-[10px] text-brand font-bold uppercase mt-1 tracking-tight">Time Slot: ${formatSlotId(slotIds)}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
-                            <button onclick="processAction('${id}', 'declined')" class="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition cursor-pointer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-                            <button onclick="processAction('${id}', 'approved')" class="p-2 rounded-lg bg-brand text-white hover:shadow-lg hover:shadow-brand/20 active:scale-95 transition cursor-pointer"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg></button>
+                            <button onclick="viewRequestSchedule('${encodedRequest}')" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand text-white hover:shadow-lg hover:shadow-brand/20 active:scale-95 transition cursor-pointer text-[11px] font-black uppercase tracking-wide">
+                                <span class="material-symbols-outlined text-[16px] leading-none">app_registration</span>
+                                View
+                            </button>
                         </div>
                     </div>
                 </div>`;
@@ -505,8 +504,6 @@
             historyContainer.insertAdjacentHTML('beforeend', html);
         }
 
-        let pendingDeclineId = null;
-
         function notify(message) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
@@ -514,46 +511,35 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        function openDeclineDialog(requestId) {
-            pendingDeclineId = requestId;
-            document.getElementById('decline-note').value = '';
-            document.getElementById('note-overlay').style.display = 'block';
-            document.getElementById('note-dialog').style.display = 'block';
-        }
-
-        window.closeDeclineDialog = function() {
-            pendingDeclineId = null;
-            document.getElementById('note-overlay').style.display = 'none';
-            document.getElementById('note-dialog').style.display = 'none';
-        }
-
-        window.confirmDecline = async function() {
-            const note = document.getElementById('decline-note').value.trim();
-            if (!note) { notify('Please add a note.'); return; }
-            const card = document.getElementById(`card-${pendingDeclineId}`);
-            if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
+        window.viewRequestSchedule = function(encodedRequest) {
             try {
-                const requestRef = ref(db, `requests/${pendingDeclineId}`);
-                await update(requestRef, { 
-                    status: 'declined', 
-                    status_message: 'Declined by Sodalis', 
-                    resident_note: note 
-                });
-                notify('Request declined.');
-            } catch (err) { notify('Decline failed.'); if (card) { card.style.opacity = "1"; card.style.pointerEvents = "auto"; } }
-            window.closeDeclineDialog();
-        }
+                const payload = JSON.parse(decodeURIComponent(encodedRequest));
+                sessionStorage.setItem('applicantScheduleFocusRequest', JSON.stringify({
+                    ...payload,
+                    createdAt: Date.now()
+                }));
+            } catch (err) {
+                notify('Unable to prepare schedule view.');
+                return;
+            }
 
-        window.processAction = async (docId, status) => {
-            if (status === 'declined') { openDeclineDialog(docId); return; }
-            const card = document.getElementById(`card-${docId}`);
-            if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
-            try {
-                const requestRef = ref(db, `requests/${docId}`);
-                const message = status === 'approved' ? 'Approved by Sodalis' : 'Cancelled by Sodalis';
-                await update(requestRef, { status: status, status_message: message });
-                notify(`Request ${status}.`);
-            } catch (err) { notify('Action failed.'); if (card) { card.style.opacity = "1"; card.style.pointerEvents = "auto"; } }
+            const parentWindow = window.parent;
+            if (!parentWindow || parentWindow === window || !parentWindow.document) {
+                notify('Open Schedule Reporting tab to view this request.');
+                return;
+            }
+
+            const normalize = (value) => (value || '').toString().trim().toLowerCase();
+            const navCandidates = Array.from(parentWindow.document.querySelectorAll('.nav-item, .m-nav-btn'));
+            const scheduleTab = navCandidates.find(el => normalize(el.textContent).includes('schedule reporting'))
+                || navCandidates.find(el => normalize(el.textContent).includes('schedule'));
+
+            if (scheduleTab) {
+                scheduleTab.click();
+                notify('Opening request in Schedule Reporting...');
+            } else {
+                notify('Schedule Reporting tab not found.');
+            }
         };
 
         checkMaintenanceSetting();
