@@ -3,546 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Requests Inbox | Resident Portal</title>
-    
+    <title>Applicant Requests | UPLB AMIS</title>
     <link rel="preconnect" href="https://rsms.me/">
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <style type="text/tailwindcss">
-        @theme {
-            --color-brand: #531C79;
-            --color-brand-light: #F4EFF8;
-            --font-sans: "Inter", system-ui, sans-serif;
+    <style>
+        :root {
+            --primary: #531C79; --border: #E2E8F0; --text: #1E293B; --free-bg: #F3E5F5;
+            --pending: #94A3B8; --approved: #531C79; --declined: #AD1457; --completed: #2FB344;
         }
+        body { font-family: Inter, sans-serif; margin: 0; background: #F8FAFC; color: var(--text); padding: 14px; }
+        .page-title { color: var(--primary); font-size: clamp(30px, 6vw, 42px); font-weight: 900; text-align: center; letter-spacing: -2px; margin: 6px 0 18px; text-transform: uppercase; }
+        .top-row { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap: wrap; max-width:1200px; margin:0 auto 10px; }
+        .status-filters { display:flex; gap:8px; flex-wrap:wrap; }
+        .filter-btn { border:1px solid var(--border); background:#fff; color:#475569; padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800; cursor:pointer; }
+        .filter-btn.active { background: var(--primary); color:#fff; border-color:var(--primary); }
+        .summary-counters { display:flex; gap:8px; margin-left:auto; }
+        .counter-pill { border:1px solid #D6DCE5; border-radius:12px; padding:8px 12px; font-size:13px; font-weight:700; white-space:nowrap; background:#fff; }
+        .counter-pill-quota { background: #F1E8FA; color: #531C79; border-color: #D8C2EA; }
+        .counter-pill-requests { background: #FDEAF2; color: #9D174D; border-color: #F4BDD5; }
 
-        .page-title {
-            font-family: 'Inter', sans-serif;
-            color: #531C79;
-            font-size: clamp(32px, 6vw, 42px);
-            font-weight: 900;
-            text-align: center;
-            text-transform: uppercase;
-            letter-spacing: -2px;
-            margin: 20px 0 30px 0;
-            -webkit-font-smoothing: antialiased;
-        }
+        .table-container { max-width:1200px; margin:0 auto; overflow:auto; background:#fff; border:1px solid var(--border); border-radius:16px; position:relative; }
+        #grid-loader { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.75); z-index:2; }
+        #grid-loader .spinner { width:30px; height:30px; border:4px solid #E2E8F0; border-top-color:var(--primary); border-radius:999px; animation:spin .9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg);} }
+        table { width:100%; min-width:850px; border-collapse:separate; border-spacing:3px; table-layout:fixed; }
+        thead th { position:sticky; top:0; background:#fff; padding:8px 0; font-size:12px; font-weight:900; color:var(--primary); }
+        .time-col { width:86px; text-align:center; font-size:10px; font-weight:800; color:#64748B; }
+        .slot { position:relative; min-height:66px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.05em; }
+        .slot.available { background: var(--free-bg); color: #7c3a9d; }
+        .slot.status-pending { background: var(--pending); color:#fff; }
+        .slot.status-approved { background: var(--approved); color:#fff; cursor:pointer; }
+        .slot.status-completed { background: var(--completed); color:#fff; }
+        .slot.status-declined { background: var(--declined); color:#fff; }
+        .slot.unavailable { background: transparent; border:1px solid #F1F5F9; color:transparent; }
+        .slot-counter { position:absolute; top:4px; right:4px; min-width:16px; height:16px; border-radius:999px; font-size:10px; font-weight:900; background:#fff; color:var(--primary); border:1px solid #D8B4FE; display:flex; align-items:center; justify-content:center; }
 
-        .card-enter {
-            animation: slideIn 0.3s ease-out forwards;
-        }
+        .request-list-wrap { max-width:1200px; margin:16px auto 0; }
+        .section-label { font-size:10px; font-weight:900; color:var(--primary); opacity:.6; margin-bottom:8px; text-transform:uppercase; letter-spacing:.2em; }
+        #request-list { display:grid; gap:10px; }
+        .request-card { background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px; }
+        .request-card .row { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+        .status-chip { font-size:10px; font-weight:900; padding:4px 8px; border-radius:999px; text-transform:uppercase; }
 
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .history-card {
-            animation: slideIn 0.3s ease-out forwards;
-            padding: 12px 14px !important;
-            margin-bottom: 8px !important;
-            transition: transform 0.2s ease;
-        }
-
-        #toast {
-            position: fixed;
-            top: 18px;
-            left: 50%;
-            transform: translate(-50%, -12px);
-            background: linear-gradient(135deg, #531C79, #BE4AAD);
-            color: white;
-            padding: 12px 22px;
-            border-radius: 999px;
-            font-size: 13px;
-            font-weight: 700;
-            display: block;
-            opacity: 0;
-            pointer-events: none;
-            z-index: 1000;
-            box-shadow: 0 12px 30px rgba(83, 28, 121, 0.35);
-            transition: opacity 0.25s ease, transform 0.25s ease;
-        }
-
-        #toast.show {
-            opacity: 1;
-            transform: translate(-50%, 0);
-        }
-
-        #note-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.5);
-            z-index: 2000;
-        }
-
-        #note-dialog {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            min-width: 320px;
-            max-width: 420px;
-            width: 90%;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-            z-index: 2001;
-        }
-
-        #note-dialog textarea {
-            width: 100%;
-            min-height: 90px;
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            padding: 10px;
-            font-size: 13px;
-            margin-top: 10px;
-            resize: vertical;
-        }
-
-        .note-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 16px;
-        }
-
-        .note-btn {
-            padding: 8px 16px;
-            border-radius: 8px;
-            border: none;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .note-btn-cancel {
-            background: #e2e8f0;
-            color: #475569;
-        }
-
-        .note-btn-confirm {
-            background: #ef4444;
-            color: white;
-        }
-
-        .maintenance-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.75);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 2100;
-            padding: 20px;
-        }
-
-        .maintenance-card {
-            background: white;
-            border-radius: 20px;
-            padding: 28px;
-            max-width: 420px;
-            width: 100%;
-            text-align: center;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
-        }
-
-        .maintenance-card h2 {
-            color: #531C79;
-            font-size: 22px;
-            font-weight: 900;
-            margin-bottom: 10px;
-        }
-
-        .maintenance-card p {
-            color: #64748b;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .container-layout {
-            display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 24px;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 10px 20px;
-            align-items: start;
-        }
-
-        .history-pane {
-            max-height: calc(100vh - 180px);
-            overflow-y: auto;
-            padding-right: 4px;
-        }
-
-        @media (max-width: 1024px) {
-            .container-layout {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .container-layout {
-                padding: 0 8px;
-                gap: 16px;
-            }
-        }
+        #detailsOverlay, .maintenance-overlay { position:fixed; inset:0; background:rgba(15,23,42,.65); display:none; align-items:center; justify-content:center; z-index:1000; }
+        #detailsModal, .maintenance-card { background:#fff; border-radius:16px; padding:20px; width:min(460px,92%); }
+        .maintenance-card { text-align:center; }
+        .meta { font-size:13px; color:#334155; margin:6px 0; }
+        .meta strong { color:#0f172a; }
+        @media (max-width: 768px) { .summary-counters { width:100%; justify-content:flex-end; } .slot{min-height:52px;font-size:0;} }
     </style>
 </head>
-<body class="bg-[#F9FAFB] font-sans antialiased text-gray-900 min-h-screen p-3 md:p-6">
-    <div id="toast"></div>
-    <div class="maintenance-overlay" id="maintenanceOverlay">
-        <div class="maintenance-card">
-            <h2>Website Under Maintenance</h2>
-            <p>The portal is currently under maintenance. Please check back later.</p>
+<body>
+    <div class="maintenance-overlay" id="maintenanceOverlay"><div class="maintenance-card"><h2>Website Under Maintenance</h2><p>The portal is currently under maintenance. Please check back later.</p></div></div>
+    <h1 class="page-title">Requests</h1>
+
+    <div class="top-row">
+        <div class="status-filters" id="statusFilters">
+            <button class="filter-btn active" data-status="all">All</button>
+            <button class="filter-btn" data-status="pending">Pending</button>
+            <button class="filter-btn" data-status="approved">Approved</button>
+            <button class="filter-btn" data-status="completed">Completed</button>
+        </div>
+        <div class="summary-counters">
+            <span class="counter-pill counter-pill-requests" id="requestsSentCounter">Requests Sent: —</span>
+            <span class="counter-pill counter-pill-quota" id="quotaCounter">Quota Left: —</span>
         </div>
     </div>
 
-    <header class="mb-4">
-        <h1 class="page-title">Requests</h1>
-    </header>
-
-    <div class="container-layout">
-        <div>
-            <h2 class="text-[10px] font-black text-brand mb-4 uppercase tracking-[0.2em] opacity-50">Pending Inbox</h2>
-            <div id="inbox-container" class="space-y-3">
-                <div id="loader" class="flex flex-col items-center py-20">
-                    <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
-                    <p class="text-gray-400 text-[10px] mt-4 font-bold uppercase tracking-widest">Syncing with Firebase...</p>
-                </div>
-            </div>
-        </div>
-
-        <div>
-            <h2 class="text-[10px] font-black text-brand mb-4 uppercase tracking-[0.2em] opacity-50">Recent History</h2>
-            <div id="history-container" class="history-pane">
-                <div id="history-loader" class="flex flex-col items-center py-20">
-                    <div class="w-8 h-8 border-4 border-brand/10 border-t-brand rounded-full animate-spin"></div>
-                    <p class="text-gray-400 text-[10px] mt-4 font-bold uppercase tracking-widest">Loading history...</p>
-                </div>
-            </div>
-        </div>
+    <div class="table-container">
+        <div id="grid-loader"><div class="spinner"></div></div>
+        <table>
+            <thead><tr><th>TIME SLOT</th><th>SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th></tr></thead>
+            <tbody id="grid-body"></tbody>
+        </table>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, onValue, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <div class="request-list-wrap">
+        <div class="section-label">My Requests</div>
+        <div id="request-list"></div>
+    </div>
 
-        // 1. FIREBASE CONFIG
-        const firebaseConfig = {
-            apiKey: "AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo",
-            authDomain: "uppss-26c6f.firebaseapp.com",
-            projectId: "uppss-26c6f",
-            storageBucket: "uppss-26c6f.firebasestorage.app",
-            messagingSenderId: "734429390148",
-            appId: "1:734429390148:web:97b7cad461e5505943a311"
-        };
+    <div id="detailsOverlay" onclick="closeDetails()"><div id="detailsModal" onclick="event.stopPropagation()"><h3 style="margin-top:0;color:#531C79">Approved Appointment Details</h3><div id="detailsContent"></div><div style="text-align:right;margin-top:12px;"><button onclick="closeDetails()" style="border:none;background:#531C79;color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;">Close</button></div></div></div>
 
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const supabaseClient = supabase.createClient(
-            'https://havsuikahafqciurmaeq.supabase.co',
-            'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C'
-        );
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        const MAINTENANCE_ADMIN_EMAILS = ['avpaner@up.edu.ph', 'pnrjr.abl@gmail.com'];
+const firebaseConfig = { apiKey:"AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo", authDomain:"uppss-26c6f.firebaseapp.com", projectId:"uppss-26c6f", storageBucket:"uppss-26c6f.firebasestorage.app", messagingSenderId:"734429390148", appId:"1:734429390148:web:97b7cad461e5505943a311" };
+const app = initializeApp(firebaseConfig); const db = getDatabase(app);
+const supabaseClient = supabase.createClient('https://havsuikahafqciurmaeq.supabase.co','sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C');
+const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const TIME_SLOTS=[{s:'7:00 AM',e:'7:30 AM'},{s:'7:30 AM',e:'8:00 AM'},{s:'8:00 AM',e:'8:30 AM'},{s:'8:30 AM',e:'9:00 AM'},{s:'9:00 AM',e:'9:30 AM'},{s:'9:30 AM',e:'10:00 AM'},{s:'10:00 AM',e:'10:30 AM'},{s:'10:30 AM',e:'11:00 AM'},{s:'11:00 AM',e:'11:30 AM'},{s:'11:30 AM',e:'12:00 PM'},{s:'12:00 PM',e:'12:30 PM'},{s:'12:30 PM',e:'1:00 PM'},{s:'1:00 PM',e:'1:30 PM'},{s:'1:30 PM',e:'2:00 PM'},{s:'2:00 PM',e:'2:30 PM'},{s:'2:30 PM',e:'3:00 PM'},{s:'3:00 PM',e:'3:30 PM'},{s:'3:30 PM',e:'4:00 PM'},{s:'4:00 PM',e:'4:30 PM'},{s:'4:30 PM',e:'5:00 PM'},{s:'5:00 PM',e:'5:30 PM'},{s:'5:30 PM',e:'6:00 PM'},{s:'6:00 PM',e:'6:30 PM'},{s:'6:30 PM',e:'7:00 PM'},{s:'7:00 PM',e:'7:30 PM'},{s:'7:30 PM',e:'8:00 PM'}];
+const MAINTENANCE_ADMIN_EMAILS=['avpaner@up.edu.ph','pnrjr.abl@gmail.com'];
 
-        function normalizeSettingTitle(value) {
-            return (value || '').toString().trim().toLowerCase();
-        }
+let allRequests={}; let selectedStatus='all'; let applicantQuota=3;
+const applicantName=getApplicantName();
 
-        function isMaintenanceAdmin(email) {
-            if (!email) return false;
-            return MAINTENANCE_ADMIN_EMAILS.includes(email.toLowerCase());
-        }
+function getApplicantName(){ const raw=sessionStorage.getItem('userProfile')||localStorage.getItem('userProfile'); if(!raw)return 'Unknown Applicant'; try{const p=JSON.parse(raw); return p.userName||p.full_name||'Unknown Applicant';}catch{return 'Unknown Applicant';}}
+function getApplicantClassification(){ const raw=sessionStorage.getItem('userProfile')||localStorage.getItem('userProfile'); if(!raw)return ''; try{const p=JSON.parse(raw); return p.userClassification||p.classification||'';}catch{return '';} }
+function normalizeSettingTitle(v){return (v||'').toString().trim().toLowerCase();}
+function isMaintenanceAdmin(email){ return email && MAINTENANCE_ADMIN_EMAILS.includes(email.toLowerCase()); }
+async function checkMaintenanceSetting(){ try{ const {data,error}=await supabaseClient.from('Setting').select('Settingtitle, Number'); if(error||!data)return; const st=data.find(r=>normalizeSettingTitle(r['Setting title']||r['Settingtitle'])==='maintenance'); const enabled=st&&Number(st['Number'])===1; const email=sessionStorage.getItem('userEmail')||localStorage.getItem('userEmail')||''; document.getElementById('maintenanceOverlay').style.display=(enabled && !isMaintenanceAdmin(email))?'flex':'none'; }catch(e){ console.warn(e);} }
 
-        async function checkMaintenanceSetting() {
-            try {
-                const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
-                if (error || !data) return;
-                const setting = data.find(row => normalizeSettingTitle(row['Setting title'] || row['Settingtitle']) === 'maintenance');
-                const isEnabled = setting && Number(setting['Number']) === 1;
-                const currentEmail = (typeof userEmail !== 'undefined' ? userEmail : '') || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
-                const showMaintenance = isEnabled && !isMaintenanceAdmin(currentEmail);
-                document.getElementById('maintenanceOverlay').style.display = showMaintenance ? 'flex' : 'none';
-            } catch (err) {
-                console.warn('Maintenance check failed', err);
-            }
-        }
+function getSlotParts(slotId){ if(!slotId||typeof slotId!=='string')return null; const [day,time]=slotId.split('-'); if(!day||!time) return null; const match=time.match(/(\d{1,2})(\d{2})(AM|PM)/i); if(!match)return null; return {day:day.trim(), compact: `${match[1]}:${match[2]} ${match[3].toUpperCase()}`}; }
+function formatSlotRange(slotIds){ if(!slotIds?.length) return 'N/A'; return slotIds.join(' | '); }
 
-        function getApplicantName() {
-            const sessionProfile = sessionStorage.getItem('userProfile');
-            const localProfile = localStorage.getItem('userProfile');
-            let userProfile = sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
-            return userProfile ? userProfile.userName || 'Unknown Applicant' : "Unknown Applicant";
-        }
-        
-        function getApplicantClassification() {
-            const sessionProfile = sessionStorage.getItem('userProfile');
-            const localProfile = localStorage.getItem('userProfile');
-            const profile = sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
-            return profile ? (profile.userClassification || '') : '';
-        }
+function buildGrid(){ let html=''; TIME_SLOTS.forEach((slot,idx)=>{ html += `<tr><td class='time-col'>${slot.s}<br>${slot.e}</td>`; DAYS.forEach(day=>{ const id=`${day.toUpperCase()} - ${slot.s}`; html += `<td><div class='slot unavailable' id='${id}' data-idx='${idx}'></div></td>`; }); html+='</tr>';}); document.getElementById('grid-body').innerHTML=html; }
 
-        function formatSlotId(slotId) {
-            if (!slotId) return 'N/A';
-            if (Array.isArray(slotId)) return formatSlotRange(slotId);
-            if (typeof slotId !== 'string') return 'N/A';
-            const parts = getSlotParts(slotId);
-            if (!parts) return slotId;
-            return `${parts.day.toUpperCase()} - ${parts.start}`;
-        }
+function requestsOfApplicant(){ return Object.entries(allRequests).filter(([,r]) => (r.applicant_name||'')===applicantName); }
 
-        function formatSlotRange(slotIds) {
-            if (!slotIds.length) return 'N/A';
-            const normalized = [...slotIds].filter(Boolean);
-            if (normalized.length === 1) return formatSlotId(normalized[0]);
-            const firstParts = getSlotParts(normalized[0]);
-            const lastParts = getSlotParts(normalized[normalized.length - 1]);
-            if (firstParts && lastParts && firstParts.day === lastParts.day) {
-                return `${firstParts.day.toUpperCase()} - ${firstParts.start} - ${lastParts.end}`;
-            }
-            return normalized.map(formatSlotId).join(' | ');
-        }
+function updateCounters(){ const reqs=requestsOfApplicant().map(([,r])=>r); const sent=reqs.filter(r=>['pending','approved','completed'].includes((r.status||'').toLowerCase())).length; const completed=reqs.filter(r=>(r.status||'').toLowerCase()==='completed').length; const quotaLeft=Math.max(applicantQuota-completed,0); document.getElementById('requestsSentCounter').textContent=`Requests Sent: ${sent}`; document.getElementById('quotaCounter').textContent=`Quota Left: ${quotaLeft}/${applicantQuota}`; }
 
-        function getSlotParts(slotId) {
-            if (!slotId || typeof slotId !== 'string') return null;
-            const [day, time] = slotId.split('-');
-            if (!day || !time) return null;
-            const match = time.match(/(\d{1,2})(\d{2})(AM|PM)/i);
-            if (!match) return null;
-            const hour = Number(match[1]);
-            const minutes = Number(match[2]);
-            const period = match[3].toUpperCase();
-            const start = formatClockTime(hour, minutes, period);
-            const end = formatClockTime(...addMinutes(hour, minutes, period, 30));
-            return { day, start, end };
-        }
+function renderGrid(){ document.querySelectorAll('.slot').forEach(el=>{ el.className='slot unavailable'; el.textContent=''; el.innerHTML=''; });
+const filtered=requestsOfApplicant().filter(([,r])=> selectedStatus==='all' || (r.status||'').toLowerCase()===selectedStatus);
+const countMap={};
+filtered.forEach(([id,r])=>{ const status=(r.status||'').toLowerCase(); (r.slot_ids || (r.slot_id?[r.slot_id]:[])).forEach(slotId=>{ const el=document.getElementById(slotId); if(!el)return; el.className=`slot status-${status}`; el.textContent=status.toUpperCase(); el.dataset.requestId=id; if(status==='approved'){ countMap[slotId]=(countMap[slotId]||0)+1; el.onclick=()=>openDetails(id);} else {el.onclick=null;} }); });
+Object.entries(countMap).forEach(([slotId,count])=>{ const el=document.getElementById(slotId); if(el) el.insertAdjacentHTML('beforeend',`<span class='slot-counter'>${count}</span>`); });
+}
 
-        function addMinutes(hour, minutes, period, add) {
-            let totalHours = period === 'PM' && hour < 12 ? hour + 12 : period === 'AM' && hour === 12 ? 0 : hour;
-            let totalMinutes = totalHours * 60 + minutes + add;
-            totalMinutes = totalMinutes % (24 * 60);
-            const newHours24 = Math.floor(totalMinutes / 60);
-            const newMinutes = totalMinutes % 60;
-            const newPeriod = newHours24 >= 12 ? 'PM' : 'AM';
-            const displayHour = newHours24 % 12 === 0 ? 12 : newHours24 % 12;
-            return [displayHour, newMinutes, newPeriod];
-        }
+function renderRequestList(){ const list=document.getElementById('request-list'); list.innerHTML='';
+const rows=requestsOfApplicant().filter(([,r])=> selectedStatus==='all' || (r.status||'').toLowerCase()===selectedStatus).sort((a,b)=>(b[1].timestamp||0)-(a[1].timestamp||0));
+if(!rows.length){ list.innerHTML="<div class='request-card'>No requests in this filter.</div>"; return; }
+rows.forEach(([id,r])=>{ const st=(r.status||'unknown').toLowerCase(); const chipColor=st==='approved'?'background:#DCFCE7;color:#166534':st==='pending'?'background:#E2E8F0;color:#334155':st==='completed'?'background:#D1FAE5;color:#065F46':'background:#FCE7F3;color:#9D174D'; const slots=r.slot_ids || (r.slot_id?[r.slot_id]:[]); list.insertAdjacentHTML('beforeend',`<div class='request-card'><div class='row'><div><div style='font-size:14px;font-weight:800'>${r.resident||'N/A'}</div><div style='font-size:12px;color:#64748b'>${formatSlotRange(slots)}</div></div><span class='status-chip' style='${chipColor}'>${st}</span></div><div style='font-size:11px;color:#94a3b8;margin-top:8px;'>${r.timestamp?new Date(r.timestamp).toLocaleString():''}</div></div>`);
+});
+}
 
-        function formatClockTime(hour, minutes, period) {
-            const paddedMinutes = String(minutes).padStart(2, '0');
-            return `${hour}:${paddedMinutes} ${period}`;
-        }
+window.openDetails=function(requestId){ const req=allRequests[requestId]; if(!req || (req.status||'').toLowerCase()!=='approved') return; const slots=req.slot_ids || (req.slot_id?[req.slot_id]:[]); const first=getSlotParts(slots[0]||''); document.getElementById('detailsContent').innerHTML=`<p class='meta'><strong>Resident:</strong> ${req.resident||'N/A'}</p><p class='meta'><strong>Location:</strong> ${req.location||'Not specified'}</p><p class='meta'><strong>Applicant:</strong> ${req.applicant_name||'N/A'}</p><p class='meta'><strong>Date:</strong> ${first?first.day:'N/A'}</p><p class='meta'><strong>Time:</strong> ${formatSlotRange(slots)}</p><p class='meta'><strong>Resident note:</strong> ${req.resident_note || req.note || 'No note.'}</p>`; document.getElementById('detailsOverlay').style.display='flex'; }
+window.closeDetails=function(){ document.getElementById('detailsOverlay').style.display='none'; }
 
-        async function fetchApplicantQuota() {
-            const classification = getApplicantClassification();
-            if (!classification) return 3;
-            const { data, error } = await supabaseClient.from('Setting').select('Settingtitle, Number');
-            if (error || !data) return 3;
-            const normalized = classification.toString().trim().toLowerCase();
-            const match = data.find(row => {
-                const title = row['Setting title'] || row['Settingtitle'];
-                return (title || '').toString().trim().toLowerCase() === normalized;
-            });
-            const quota = match ? Number(match['Number']) : NaN;
-            return Number.isFinite(quota) && quota > 0 ? quota : 3;
-        }
+async function fetchApplicantQuota(){ const c=getApplicantClassification(); if(!c) return 3; const {data,error}=await supabaseClient.from('Setting').select('Settingtitle, Number'); if(error||!data) return 3; const n=c.toString().trim().toLowerCase(); const m=data.find(r=>normalizeSettingTitle(r['Setting title']||r['Settingtitle'])===n); const q=m?Number(m['Number']):NaN; return Number.isFinite(q)&&q>0?q:3; }
 
-        const applicantName = getApplicantName();
-        let slotQuota = 3;
-        fetchApplicantQuota().then((quota) => { slotQuota = quota; });
+function renderAll(){ updateCounters(); renderGrid(); renderRequestList(); }
 
-        // 3. PENDING REQUESTS
-        const container = document.getElementById('inbox-container');
-        const loader = document.getElementById('loader');
+document.getElementById('statusFilters').addEventListener('click',(e)=>{ const btn=e.target.closest('.filter-btn'); if(!btn) return; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); selectedStatus=btn.dataset.status; renderAll(); });
 
-        const requestsRef = query(ref(db, "requests"), orderByChild("applicant_name"), equalTo(applicantName));
-
-        onValue(requestsRef, (snapshot) => {
-            loader.classList.add('hidden');
-            container.innerHTML = "";
-            const requests = snapshot.val() || {};
-            const approvedCounts = {};
-            
-            Object.entries(requests).forEach(([, data]) => {
-                if (data.applicant_name === applicantName && data.status === 'approved') {
-                    const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-                    slotIds.forEach(slotId => {
-                        approvedCounts[slotId] = (approvedCounts[slotId] || 0) + 1;
-                    });
-                }
-            });
-
-            const pendingItems = Object.entries(requests)
-                .filter(([, data]) => data.applicant_name === applicantName && data.status === 'pending');
-
-            if (pendingItems.length === 0) {
-                container.innerHTML = `<div class="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm"><p class="text-gray-400 font-bold text-sm uppercase tracking-tight">No pending requests found</p></div>`;
-                return;
-            }
-
-            pendingItems.forEach(([id, data]) => {
-                const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-                const isFull = slotIds.some(slotId => (approvedCounts[slotId] || 0) >= slotQuota);
-                if (slotIds.length && isFull) {
-                    const requestRef = ref(db, `requests/${id}`);
-                    update(requestRef, { status: 'declined', status_message: 'Declined by System', resident_note: 'The slot is already full.' });
-                    return;
-                }
-                renderRequestCard(id, data);
-            });
-        });
-
-        // 4. HISTORY
-        const historyContainer = document.getElementById('history-container');
-        const historyLoader = document.getElementById('history-loader');
-
-        onValue(requestsRef, (snapshot) => {
-            historyLoader.classList.add('hidden');
-            historyContainer.innerHTML = "";
-            const historyItems = Object.entries(snapshot.val() || {})
-                .filter(([, data]) => data.applicant_name === applicantName && data.status !== 'pending')
-                .map(([id, data]) => ({ id, ...data }));
-
-            if (historyItems.length === 0) {
-                historyContainer.innerHTML = `<div class="text-center py-12 bg-white rounded-2xl border border-gray-100"><p class="text-gray-400 font-bold text-xs uppercase tracking-tight">No history yet</p></div>`;
-                return;
-            }
-
-            historyItems.sort((a, b) => (b.timestamp ? new Date(b.timestamp).getTime() : 0) - (a.timestamp ? new Date(a.timestamp).getTime() : 0));
-            historyItems.forEach(item => renderHistoryCard(item.id, item));
-        });
-
-        function renderRequestCard(id, data) {
-            const residentName = data.resident || data.resident_name || 'Resident';
-            const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-            const residentPhoto = data.resident_photo || data.residentPhoto || '';
-            const initials = residentName.split(' ').filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'R';
-            const encodedRequest = encodeURIComponent(JSON.stringify({
-                id,
-                resident: residentName,
-                slot_ids: slotIds,
-                slot_id: data.slot_id || slotIds[0] || ''
-            }));
-            
-            const html = `
-                <div id="card-${id}" class="card-enter bg-white border border-brand/10 rounded-2xl p-4 shadow-sm group transition-all hover:border-brand/25">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0 flex items-center gap-3">
-                            ${residentPhoto 
-                                ? `<img src="${residentPhoto}" class="w-10 h-10 rounded-full object-cover border border-brand/20">` 
-                                : `<div class="w-10 h-10 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">${initials}</div>`
-                            }
-                            <div class="min-w-0">
-                                <h4 class="font-black text-gray-900 text-sm leading-tight break-words">${residentName}</h4>
-                                <p class="text-[10px] text-brand font-bold uppercase mt-1 tracking-tight">Time Slot: ${formatSlotId(slotIds)}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 shrink-0">
-                            <button onclick="viewRequestSchedule('${encodedRequest}')" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-brand text-white hover:shadow-lg hover:shadow-brand/20 active:scale-95 transition cursor-pointer text-[11px] font-black uppercase tracking-wide">
-                                <span class="material-symbols-outlined text-[16px] leading-none">app_registration</span>
-                                View
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-            container.insertAdjacentHTML('beforeend', html);
-        }
-
-        function renderHistoryCard(id, data) {
-            const applicantName = data.applicant_name || data.applicant || 'Unknown';
-            const status = data.status || 'unknown';
-            
-            // Logic for readability & status text
-            let statusDisplay = status;
-            let statusTextClass = "text-gray-900";
-            let statusBg = "bg-white border-gray-200";
-
-            if (status === 'approved') {
-                statusBg = "bg-emerald-50/70 border-emerald-100";
-                statusTextClass = "text-emerald-900";
-            } else if (status === 'declined' || status === 'cancelled') {
-                statusBg = "bg-rose-50/70 border-rose-100";
-                statusTextClass = "text-rose-900";
-            }
-
-            const statusIcon = status === 'approved' ? '✓' : (status === 'cancelled' ? '○' : '✗');
-            const slotIds = data.slot_ids || (data.slot_id ? [data.slot_id] : []);
-            const applicantPhoto = data.applicant_photo || data.applicantPhoto || data.photo_url || data.photoUrl || '';
-            const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-
-            const html = `
-                <div id="history-${id}" class="history-card border rounded-xl shadow-sm ${statusBg}">
-                    <div class="flex items-center justify-between gap-2">
-                        <div class="min-w-0 flex items-center gap-2.5">
-                            ${applicantPhoto 
-                                ? `<img src="${applicantPhoto}" class="w-7 h-7 rounded-full object-cover border border-black/5">`
-                                : `<div class="w-7 h-7 rounded-full bg-white/80 flex items-center justify-center font-black text-[10px] text-brand">${applicantName.charAt(0)}</div>`
-                            }
-                            <div class="min-w-0">
-                                <h4 class="font-bold text-[12px] text-gray-900 leading-tight truncate">${applicantName}</h4>
-                                <p class="text-[9px] font-black uppercase opacity-40 tracking-tighter">${formatSlotId(slotIds)}</p>
-                            </div>
-                        </div>
-                        <div class="text-[9px] font-black uppercase whitespace-nowrap px-2 py-0.5 rounded bg-white/50 ${statusTextClass}">${statusIcon} ${status}</div>
-                    </div>
-                    <div class="flex justify-between items-center mt-2 pt-2 border-t border-black/5">
-                        <div class="text-[10px] font-black text-gray-700 uppercase tracking-tight truncate">${data.status_message || ''}</div>
-                        <div class="text-[9px] font-bold text-gray-400 whitespace-nowrap uppercase tracking-tighter ml-4">${timestamp}</div>
-                    </div>
-                    ${data.note ? `<div class="text-[10px] text-gray-500 mt-1.5 italic font-medium leading-relaxed">Note: ${data.note}</div>` : ''}
-                </div>`;
-            historyContainer.insertAdjacentHTML('beforeend', html);
-        }
-
-        function notify(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 3000);
-        }
-
-        window.viewRequestSchedule = function(encodedRequest) {
-            try {
-                const payload = JSON.parse(decodeURIComponent(encodedRequest));
-                sessionStorage.setItem('applicantScheduleFocusRequest', JSON.stringify({
-                    ...payload,
-                    createdAt: Date.now()
-                }));
-            } catch (err) {
-                notify('Unable to prepare schedule view.');
-                return;
-            }
-
-            const parentWindow = window.parent;
-            if (!parentWindow || parentWindow === window || !parentWindow.document) {
-                notify('Open Schedule Reporting tab to view this request.');
-                return;
-            }
-
-            const normalize = (value) => (value || '').toString().trim().toLowerCase();
-            const navCandidates = Array.from(parentWindow.document.querySelectorAll('.nav-item, .m-nav-btn'));
-            const scheduleTab = navCandidates.find(el => normalize(el.textContent).includes('schedule reporting'))
-                || navCandidates.find(el => normalize(el.textContent).includes('schedule'));
-
-            if (scheduleTab) {
-                scheduleTab.click();
-                notify('Opening request in Schedule Reporting...');
-            } else {
-                notify('Schedule Reporting tab not found.');
-            }
-        };
-
-        checkMaintenanceSetting();
-    </script>
+buildGrid();
+Promise.all([fetchApplicantQuota(), checkMaintenanceSetting()]).then(([q])=>{ applicantQuota=q; });
+const requestsRef=ref(db,'requests');
+onValue(requestsRef,(snap)=>{ allRequests=snap.val()||{}; renderAll(); document.getElementById('grid-loader').style.display='none'; });
+</script>
 </body>
 </html>

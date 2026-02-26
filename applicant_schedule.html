@@ -32,7 +32,6 @@
         .collapse-toggle { border: 1px solid var(--border); background: #fff; color: var(--primary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
         .filter-container { background: white; padding: 18px 20px; border-top: 1px solid var(--border); }
         .filter-panel.collapsed .filter-container { display: none; }
-        .summary-counters { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 12px 18px; background: #fff; border-bottom: 1px solid var(--border); }
         .counter-pill { border: 1px solid #D6DCE5; border-radius: 12px; padding: 8px 14px; font-size: 14px; font-weight: 700; letter-spacing: 0; color: #334155; white-space: nowrap; transition: opacity 0.2s ease; }
         .counter-pill.loading { opacity: 0.75; }
         .counter-pill-quota { background: #F1E8FA; color: #531C79; border-color: #D8C2EA; }
@@ -59,7 +58,10 @@
 
         /* Grid */
         #action-bar { background: var(--primary); color: white; padding: 12px 25px; display: none; align-items: center; justify-content: space-between; z-index: 101; }
-        .table-container { flex-grow: 1; overflow: auto; background: white; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+        .table-container { flex-grow: 1; overflow: auto; background: white; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; overscroll-behavior: contain; position: relative; }
+        #grid-loader { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(255,255,255,0.75); z-index: 20; }
+        #grid-loader .spinner { width: 30px; height: 30px; border: 4px solid #E2E8F0; border-top-color: var(--primary); border-radius: 999px; animation: spin 0.9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         table { width: 100%; border-collapse: separate; border-spacing: 3px; min-width: 850px; table-layout: fixed; }
 
         thead th {
@@ -149,7 +151,6 @@
         .slot.status-full { background: #FCE7F3 !important; border-color: #EC4899; color: #9D174D; font-weight: 900; letter-spacing: 0.03em; }
         .slot.unavailable { background: transparent; border: 1px solid #F1F5F9; color: transparent; pointer-events: none; }
         .slot.highlight-strict { outline: 3px solid var(--primary); transform: scale(0.96); z-index: 2; box-shadow: 0 0 10px rgba(83, 28, 121, 0.4); }
-        .slot.focused-request { outline: 3px solid #F59E0B; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
         .slot-counter { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.95); color: var(--primary); border: 1px solid #D8B4FE; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; }
 
         /* Modal & Toast */
@@ -189,7 +190,6 @@
             body { overflow: auto; }
             .panel-header { flex-direction: column; align-items: stretch; gap: 6px; }
             .panel-controls { justify-content: flex-end; flex-wrap: wrap; }
-            .summary-counters { padding: 10px 12px; gap: 8px; justify-content: flex-start; }
             .counter-pill { width: auto; text-align: center; font-size: 13px; padding: 7px 12px; border-radius: 10px; }
             .table-container { overflow: auto; }
             table { min-width: 0; width: 100%; border-spacing: 1px; }
@@ -236,17 +236,13 @@
         </div>
     </div>
 
-    <div class="summary-counters">
-        <span class="counter-pill counter-pill-requests" id="requestsSentCounter">Requests Sent: —</span>
-        <span class="counter-pill counter-pill-quota" id="quotaCounter">Quota Left: —</span>
-    </div>
-
     <div id="action-bar">
         <div id="action-msg" style="font-weight: 800; font-size: 13px;">Status</div>
         <div id="action-btns"></div>
     </div>
 
     <div class="table-container">
+        <div id="grid-loader"><div class="spinner"></div></div>
         <table>
             <thead>
                 <tr><th>TIME SLOT</th><th>SUN</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th></tr>
@@ -295,12 +291,8 @@
         let currentRequestsRef = null;
         let currentAvailableSlots = [];
         let currentAllRequests = {};
-        let applicantQuota = 3;
-        let hasLoadedRequests = false;
-        let isRequestsLoading = false;
 
         function detachResidentListeners() {
-            isRequestsLoading = false;
             if (currentScheduleRef) {
                 currentScheduleRef.off();
                 currentScheduleRef = null;
@@ -394,43 +386,6 @@
             return '';
         }
 
-        function updateCounters(allRequests = currentAllRequests, options = {}) {
-            const { forcePlaceholder = false, loading = false } = options;
-            const requestsSentCounter = document.getElementById('requestsSentCounter');
-            const quotaCounter = document.getElementById('quotaCounter');
-            const loadingActive = loading || isRequestsLoading;
-
-            requestsSentCounter.classList.toggle('loading', loadingActive);
-            quotaCounter.classList.toggle('loading', loadingActive);
-
-            if (forcePlaceholder) {
-                requestsSentCounter.textContent = 'Requests Sent: —';
-                quotaCounter.textContent = 'Quota Left: —';
-                return;
-            }
-
-            if (loadingActive) return;
-
-            if (!hasLoadedRequests) {
-                requestsSentCounter.textContent = 'Requests Sent: —';
-                quotaCounter.textContent = 'Quota Left: —';
-                return;
-            }
-
-            const sentStatuses = new Set(['pending', 'approved', 'completed']);
-            const completedStatuses = new Set(['completed']);
-            const requestList = Object.values(allRequests || {});
-            const sentCount = requestList.filter(req =>
-                req?.applicant_name === currentUser && sentStatuses.has((req.status || '').toLowerCase())
-            ).length;
-            const completedCount = requestList.filter(req =>
-                req?.applicant_name === currentUser && completedStatuses.has((req.status || '').toLowerCase())
-            ).length;
-            const quotaLeft = Math.max(applicantQuota - completedCount, 0);
-            requestsSentCounter.textContent = `Requests Sent: ${sentCount}`;
-            quotaCounter.textContent = `Quota Left: ${quotaLeft}/${applicantQuota}`;
-        }
-
         function getResidentFacebookLink() {
             if (!selectedRes) return '';
             return selectedRes.facebook || selectedRes.facebook_link || selectedRes.facebookLink || selectedRes.fb_link || '';
@@ -452,11 +407,7 @@
             window.open(link, '_blank', 'noopener,noreferrer');
         }
 
-        function resolveApplicantQuota() {
-            const settingMatch = Object.entries(settings).find(([title]) => (title || '').toString().trim().toLowerCase() === 'quota');
-            const parsedQuota = settingMatch ? Number(settingMatch[1]) : NaN;
-            return Number.isFinite(parsedQuota) && parsedQuota > 0 ? parsedQuota : 3;
-        }
+        
 
         // --- INITIALIZATION ---
         async function init() {
@@ -469,11 +420,7 @@
             ]);
             residents = resData || [];
             setData?.forEach(s => settings[s.Settingtitle] = parseFloat(s.Number));
-            applicantQuota = resolveApplicantQuota();
-            updateCounters({}, { forcePlaceholder: true });
-
             onFilterTypeChange();
-            await applyFocusedRequestFilters();
         }
 
         function buildGrid() {
@@ -507,15 +454,7 @@
             return resident.committee || resident.Committee || resident.committee_name || resident.committeeName || '';
         }
 
-        function consumeFocusedRequest() {
-            const raw = sessionStorage.getItem('applicantScheduleFocusRequest');
-            if (!raw) return null;
-            try {
-                return JSON.parse(raw);
-            } catch (err) {
-                return null;
-            }
-        }
+        
 
         function normalizeFocusedSlotIds(focusPayload) {
             if (!focusPayload) return [];
@@ -543,73 +482,9 @@
             });
         }
 
-        function applyFocusedSlotHighlighting() {
-            if (!focusedSlotIds.length) return;
-            const matchedSlots = focusedSlotIds
-                .map(id => document.getElementById(id))
-                .filter(Boolean);
+        
 
-            matchedSlots.forEach(el => el.classList.add('focused-request'));
-
-            if (!hasAutoScrolledFocus && matchedSlots.length) {
-                matchedSlots[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-                hasAutoScrolledFocus = true;
-            }
-        }
-
-        async function applyFocusedRequestFilters() {
-            const focus = consumeFocusedRequest();
-            if (!focus) return;
-
-            const slots = normalizeFocusedSlotIds(focus);
-            focusedSlotIds = slots;
-            hasAutoScrolledFocus = false;
-
-            if (!focus.resident || !focus.resident.trim()) {
-                if (slots.length) {
-                    document.getElementById('slot-info').innerText = `Focused Request: ${slots.join(' | ')}`;
-                }
-                toast('Focused request is missing a resident; please choose one manually.');
-                return;
-            }
-
-            const targetResident = residents.find(r => (r.full_name || '').trim() === focus.resident.trim());
-            if (!targetResident) {
-                toast(`Resident not found: ${focus.resident}`);
-                return;
-            }
-
-            const filterTypeInput = document.querySelector('input[name="filterType"][value="classification"]');
-            if (filterTypeInput) {
-                filterTypeInput.checked = true;
-            }
-            onFilterTypeChange();
-
-            const classSelect = document.getElementById('sel-class');
-            if (classSelect) {
-                classSelect.value = targetResident.classification || '';
-                onClassChange();
-            }
-
-            const cardRendered = await waitForResidentCard(targetResident.full_name);
-            if (!cardRendered) {
-                toast(`Unable to render resident card for ${targetResident.full_name}.`);
-                return;
-            }
-
-            selectResident(targetResident.full_name);
-            await new Promise(resolve => requestAnimationFrame(() => resolve()));
-            applyFocusedSlotHighlighting();
-
-            if (slots.length) {
-                document.getElementById('slot-info').innerText = `Focused Request: ${slots.join(' | ')}`;
-            }
-            toast(`Focused request loaded for ${targetResident.full_name}`);
-
-            if (selectedRes?.full_name === targetResident.full_name) {
-                sessionStorage.removeItem('applicantScheduleFocusRequest');
-            }
-        }
+        
 
         function onFilterTypeChange() {
             const filterType = getActiveFilterType();
@@ -707,17 +582,19 @@
             durationHours = settings[`Hours_${selectedRes.classification}`] || 0.5;
             currentAvailableSlots = [];
             currentAllRequests = {};
-            isRequestsLoading = true;
             clearGridToBlank();
-            updateCounters(currentAllRequests, { loading: true });
+            toggleGridLoader(true);
 
             let hasSeenFirstRequestSnapshot = false;
+            let hasSeenFirstScheduleSnapshot = false;
             const resKey = name.replace(/[.#$\[\]]/g, '_');
             currentScheduleRef = db.ref(`schedules/${resKey}`);
             currentRequestsRef = db.ref('requests');
 
             currentScheduleRef.on('value', snap => {
                 currentAvailableSlots = (snap.val() || {}).available_slots || [];
+                hasSeenFirstScheduleSnapshot = true;
+                if (hasSeenFirstRequestSnapshot && hasSeenFirstScheduleSnapshot) toggleGridLoader(false);
                 renderGrid(currentAvailableSlots, currentAllRequests);
             });
 
@@ -725,12 +602,15 @@
                 currentAllRequests = reqSnap.val() || {};
                 if (!hasSeenFirstRequestSnapshot) {
                     hasSeenFirstRequestSnapshot = true;
-                    hasLoadedRequests = true;
-                    isRequestsLoading = false;
-                    updateCounters(currentAllRequests);
+                    if (hasSeenFirstRequestSnapshot && hasSeenFirstScheduleSnapshot) toggleGridLoader(false);
                 }
                 renderGrid(currentAvailableSlots, currentAllRequests);
             });
+        }
+
+        function toggleGridLoader(show) {
+            const loader = document.getElementById('grid-loader');
+            if (loader) loader.style.display = show ? 'flex' : 'none';
         }
 
         function isMobileView() {
@@ -747,6 +627,7 @@
             activeReq = null; document.getElementById('action-bar').style.display = 'none';
 
             const approvedCountMap = {};
+            const ownStatusMap = {};
             Object.entries(allRequests).forEach(([id, req]) => {
                 const normalizedStatus = (req.status || '').toLowerCase();
                 if (req.resident === selectedRes.full_name) {
@@ -754,6 +635,7 @@
                     if (req.applicant_name === currentUser) { activeReq = { ...req, id }; updateActionBar(req); }
                     (req.slot_ids || [req.slot_id]).forEach(sid => {
                         if (normalizedStatus === 'approved') approvedCountMap[sid] = (approvedCountMap[sid] || 0) + 1;
+                        if (req.applicant_name === currentUser) ownStatusMap[sid] = normalizedStatus;
                     });
                 }
             });
@@ -763,8 +645,6 @@
                 const slotId = rawSlot.replace("(/)", "");
                 availableSlotMap.set(slotId, rawSlot);
             });
-
-            updateCounters(allRequests);
 
             document.querySelectorAll('.slot').forEach(el => {
                 const rawSlot = availableSlotMap.get(el.id);
@@ -778,13 +658,18 @@
                     el.innerText = '';
                 }
 
+                const ownStatus = ownStatusMap[el.id];
+                if (ownStatus && !el.classList.contains('status-full')) {
+                    el.classList.add(`status-${ownStatus}`);
+                    el.innerText = isMobileView() ? '' : ownStatus.toUpperCase();
+                }
+
                 const acceptedCount = approvedCountMap[el.id] || 0;
                 if (acceptedCount > 0) {
                     el.insertAdjacentHTML('beforeend', `<span class="slot-counter" title="Approved applicants">${acceptedCount}</span>`);
                 }
             });
 
-            applyFocusedSlotHighlighting();
         }
 
         function updateActionBar(req) {
