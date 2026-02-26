@@ -149,6 +149,7 @@
         .slot.status-full { background: #FCE7F3 !important; border-color: #EC4899; color: #9D174D; font-weight: 900; letter-spacing: 0.03em; }
         .slot.unavailable { background: transparent; border: 1px solid #F1F5F9; color: transparent; pointer-events: none; }
         .slot.highlight-strict { outline: 3px solid var(--primary); transform: scale(0.96); z-index: 2; box-shadow: 0 0 10px rgba(83, 28, 121, 0.4); }
+        .slot.focused-request { outline: 3px solid #F59E0B; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
         .slot-counter { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.95); color: var(--primary); border: 1px solid #D8B4FE; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; }
 
         /* Modal & Toast */
@@ -472,7 +473,7 @@
             updateCounters({}, { forcePlaceholder: true });
 
             onFilterTypeChange();
-            applyFocusedRequestFilters();
+            await applyFocusedRequestFilters();
         }
 
         function buildGrid() {
@@ -516,12 +517,67 @@
             }
         }
 
-        function applyFocusedRequestFilters() {
+        function normalizeFocusedSlotIds(focusPayload) {
+            if (!focusPayload) return [];
+            const rawSlots = Array.isArray(focusPayload.slot_ids)
+                ? focusPayload.slot_ids
+                : (focusPayload.slot_id ? [focusPayload.slot_id] : []);
+            return [...new Set(rawSlots.filter(Boolean).map(s => s.toString().trim()))];
+        }
+
+        function waitForResidentCard(fullName, attempts = 8) {
+            const cardId = `card-${(fullName || '').replace(/\s/g, '')}`;
+            return new Promise(resolve => {
+                const check = (remaining) => {
+                    if (document.getElementById(cardId)) {
+                        resolve(true);
+                        return;
+                    }
+                    if (remaining <= 0) {
+                        resolve(false);
+                        return;
+                    }
+                    requestAnimationFrame(() => check(remaining - 1));
+                };
+                Promise.resolve().then(() => check(attempts));
+            });
+        }
+
+        function applyFocusedSlotHighlighting() {
+            if (!focusedSlotIds.length) return;
+            const matchedSlots = focusedSlotIds
+                .map(id => document.getElementById(id))
+                .filter(Boolean);
+
+            matchedSlots.forEach(el => el.classList.add('focused-request'));
+
+            if (!hasAutoScrolledFocus && matchedSlots.length) {
+                matchedSlots[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                hasAutoScrolledFocus = true;
+            }
+        }
+
+        async function applyFocusedRequestFilters() {
             const focus = consumeFocusedRequest();
-            if (!focus || !focus.resident) return;
+            if (!focus) return;
+
+            const slots = normalizeFocusedSlotIds(focus);
+            focusedSlotIds = slots;
+            hasAutoScrolledFocus = false;
+
+            if (!focus.resident || !focus.resident.trim()) {
+                if (slots.length) {
+                    document.getElementById('slot-info').innerText = `Focused Request: ${slots.join(' | ')}`;
+                }
+                toast('Focused request is missing a resident; please choose one manually.');
+                return;
+            }
 
             const targetResident = residents.find(r => (r.full_name || '').trim() === focus.resident.trim());
-            if (!targetResident) return;
+            if (!targetResident) {
+                toast(`Resident not found: ${focus.resident}`);
+                return;
+            }
 
             const filterTypeInput = document.querySelector('input[name="filterType"][value="classification"]');
             if (filterTypeInput) {
@@ -535,16 +591,24 @@
                 onClassChange();
             }
 
-            if (targetResident.full_name) {
-                selectRes(targetResident.full_name);
-                const slots = Array.isArray(focus.slot_ids) ? focus.slot_ids : (focus.slot_id ? [focus.slot_id] : []);
-                if (slots.length) {
-                    document.getElementById('slot-info').innerText = `Focused Request: ${slots.join(' | ')}`;
-                }
-                toast(`Focused request loaded for ${targetResident.full_name}`);
+            const cardRendered = await waitForResidentCard(targetResident.full_name);
+            if (!cardRendered) {
+                toast(`Unable to render resident card for ${targetResident.full_name}.`);
+                return;
             }
 
-            sessionStorage.removeItem('applicantScheduleFocusRequest');
+            selectResident(targetResident.full_name);
+            await new Promise(resolve => requestAnimationFrame(() => resolve()));
+            applyFocusedSlotHighlighting();
+
+            if (slots.length) {
+                document.getElementById('slot-info').innerText = `Focused Request: ${slots.join(' | ')}`;
+            }
+            toast(`Focused request loaded for ${targetResident.full_name}`);
+
+            if (selectedRes?.full_name === targetResident.full_name) {
+                sessionStorage.removeItem('applicantScheduleFocusRequest');
+            }
         }
 
         function onFilterTypeChange() {
@@ -719,6 +783,8 @@
                     el.insertAdjacentHTML('beforeend', `<span class="slot-counter" title="Approved applicants">${acceptedCount}</span>`);
                 }
             });
+
+            applyFocusedSlotHighlighting();
         }
 
         function updateActionBar(req) {
