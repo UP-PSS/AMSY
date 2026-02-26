@@ -145,6 +145,7 @@
         .slot.status-approved { background: var(--approved) !important; color: white; }
         .slot.status-declined { background: var(--declined) !important; color: white; }
         .slot.status-completed { background: var(--completed) !important; color: white; }
+        .slot.status-full { background: #FCE7F3 !important; border-color: #EC4899; color: #9D174D; font-weight: 900; letter-spacing: 0.03em; }
         .slot.unavailable { background: transparent; border: 1px solid #F1F5F9; color: transparent; pointer-events: none; }
         .slot.highlight-strict { outline: 3px solid var(--primary); transform: scale(0.96); z-index: 2; box-shadow: 0 0 10px rgba(83, 28, 121, 0.4); }
         .slot-counter { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.95); color: var(--primary); border: 1px solid #D8B4FE; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; }
@@ -197,6 +198,7 @@
             .time-end { font-size: 7px; }
             td { padding: 0; }
             .slot { height: auto; min-height: 0; aspect-ratio: 1 / 1; padding: 0; gap: 0; border-radius: 2px; font-size: 0; color: transparent !important; }
+            .slot.status-full { font-size: 9px; color: #9D174D !important; display: flex; align-items: center; justify-content: center; }
         }
 
     </style>
@@ -648,7 +650,6 @@
             document.querySelectorAll('.slot').forEach(s => { s.className = 'slot'; s.innerHTML = ''; });
             activeReq = null; document.getElementById('action-bar').style.display = 'none';
 
-            const statusMap = {};
             const approvedCountMap = {};
             Object.entries(allRequests).forEach(([id, req]) => {
                 const normalizedStatus = (req.status || '').toLowerCase();
@@ -656,25 +657,29 @@
                     if (normalizedStatus === 'cancelled') return;
                     if (req.applicant_name === currentUser) { activeReq = { ...req, id }; updateActionBar(req); }
                     (req.slot_ids || [req.slot_id]).forEach(sid => {
-                        statusMap[sid] = normalizedStatus;
                         if (normalizedStatus === 'approved') approvedCountMap[sid] = (approvedCountMap[sid] || 0) + 1;
                     });
                 }
             });
 
+            const availableSlotMap = new Map();
+            available.forEach(rawSlot => {
+                const slotId = rawSlot.replace("(/)", "");
+                availableSlotMap.set(slotId, rawSlot);
+            });
+
             updateCounters(allRequests);
 
             document.querySelectorAll('.slot').forEach(el => {
-                const status = statusMap[el.id];
-                if (status) {
-                    el.classList.add(`status-${status}`);
-                    el.innerText = isMobileView() ? '' : status.toUpperCase();
+                const rawSlot = availableSlotMap.get(el.id);
+                if (!rawSlot) {
+                    el.classList.add('unavailable');
+                } else if (rawSlot.includes("(/)")) {
+                    el.classList.add('status-full');
+                    el.innerText = 'FULL';
                 } else {
-                    const raw = available.find(a => a.replace("(/)", "") === el.id);
-                    if (raw) {
-                        if (raw.includes("(/)")) el.classList.add('unavailable');
-                        else { el.classList.add('available'); el.innerText = ''; }
-                    } else el.classList.add('unavailable');
+                    el.classList.add('available');
+                    el.innerText = '';
                 }
 
                 const acceptedCount = approvedCountMap[el.id] || 0;
