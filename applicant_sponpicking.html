@@ -6,6 +6,8 @@
     <title>Owl Sponsor App</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         :root { 
             --purple: #6200ea; 
@@ -97,7 +99,7 @@
 <body>
 
     <div class="bottom-nav">
-        <div class="icon-btn btn-x" onclick="loadNextSponsor()">
+        <div class="icon-btn btn-x" onclick="handleDecline()">
             <span class="material-symbols-outlined">close</span>
         </div>
         <div class="icon-btn btn-owl" id="owlBtn" onclick="triggerLike()">
@@ -116,6 +118,18 @@
         const _URL = 'https://havsuikahafqciurmaeq.supabase.co';
         const _KEY = 'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C';
         const _owl = supabase.createClient(_URL, _KEY);
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZ6z7ldY06D1bUofMEoVUAwMu90bqivuo",
+            authDomain: "uppss-26c6f.firebaseapp.com",
+            databaseURL: "https://uppss-26c6f-default-rtdb.firebaseio.com",
+            projectId: "uppss-26c6f",
+            storageBucket: "uppss-26c6f.firebasestorage.app",
+            messagingSenderId: "734429390148",
+            appId: "1:734429390148:web:97b7cad461e5505943a311"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const firebaseDb = firebase.database();
+        let activeSponsor = null;
 
         /**
          * IMAGE ENGINE
@@ -151,10 +165,37 @@
 
                 // Pick a random sponsor
                 const randomSponsor = data[Math.floor(Math.random() * data.length)];
+                activeSponsor = randomSponsor;
                 renderProfile(randomSponsor);
             } catch (err) {
                 container.innerHTML = `<div style="padding:50px; text-align:center; color:red;">${err.message}</div>`;
             }
+        }
+
+        function getApplicantEmail() {
+            return sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || 'unknown@applicant';
+        }
+
+        function saveSponsorDecision(status) {
+            if (!activeSponsor) return;
+            const applicantEmail = getApplicantEmail();
+            const sponsorName = activeSponsor.sponsor_name || 'Anonymous';
+            const sponsorDetail = activeSponsor.about_me || 'No details provided';
+            const timeline = new Date().toISOString();
+
+            firebaseDb.ref('sponsor_picking').push({
+                applicant_email: applicantEmail,
+                sponsor_name: sponsorName,
+                sponsor_detail: sponsorDetail,
+                decision: status,
+                timeline,
+                detail: `${applicantEmail} | ${sponsorName} | ${sponsorDetail} | ${status} | ${timeline}`
+            });
+        }
+
+        function handleDecline() {
+            saveSponsorDecision('declined');
+            loadNextSponsor();
         }
 
         function renderProfile(s) {
@@ -208,6 +249,8 @@
             heart.className = 'material-symbols-outlined heart';
             heart.innerText = 'favorite';
             document.getElementById('owlBtn').appendChild(heart);
+            saveSponsorDecision('approved');
+            loadNextSponsor();
             setTimeout(() => heart.remove(), 1000);
         }
 
