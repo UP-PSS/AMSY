@@ -99,8 +99,6 @@ const MAINTENANCE_ADMIN_EMAILS=['avpaner@up.edu.ph','pnrjr.abl@gmail.com'];
 
 let allRequests={}; let selectedStatus='all'; let applicantQuota=3;
 const applicantName=getApplicantName();
-let scheduleWindow={opendate:null, closedate:null};
-let hasAttemptedClosedateMerge=false;
 
 function getApplicantName(){ const raw=sessionStorage.getItem('userProfile')||localStorage.getItem('userProfile'); if(!raw)return 'Unknown Applicant'; try{const p=JSON.parse(raw); return p.userName||p.full_name||'Unknown Applicant';}catch{return 'Unknown Applicant';}}
 function getApplicantClassification(){ const raw=sessionStorage.getItem('userProfile')||localStorage.getItem('userProfile'); if(!raw)return ''; try{const p=JSON.parse(raw); return p.userClassification||p.classification||'';}catch{return '';} }
@@ -110,93 +108,6 @@ async function checkMaintenanceSetting(){ try{ const {data,error}=await supabase
 
 function getSlotParts(slotId){ if(!slotId||typeof slotId!=='string')return null; const [day,time]=slotId.split('-'); if(!day||!time) return null; const match=time.match(/(\d{1,2})(\d{2})(AM|PM)/i); if(!match)return null; return {day:day.trim(), compact: `${match[1]}:${match[2]} ${match[3].toUpperCase()}`}; }
 function formatSlotRange(slotIds){ if(!slotIds?.length) return 'N/A'; return slotIds.join(' | '); }
-function parseScheduleDate(raw){
-    if(!raw || typeof raw!=='string') return null;
-    const normalized=raw.replace(/\s+/g,' ').trim();
-    const parts=normalized.match(/^([A-Za-z]+\s+\d{1,2},\s*\d{4})\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)$/i);
-    if(!parts) return null;
-    const parsed=new Date(`${parts[1]} ${parts[2].toUpperCase()}`);
-    return Number.isNaN(parsed.getTime())?null:parsed;
-}
-function normalizeEmail(value){ return (value||'').toString().trim().toLowerCase(); }
-function getResidentEmail(request){ return normalizeEmail(request?.resident_mail || request?.resident_email || request?.residentEmail || request?.residentMail); }
-function getApplicantEmail(request){ return normalizeEmail(request?.applicants_mail || request?.applicant_mail || request?.applicant_email || request?.applicantEmail || request?.email); }
-function parseSlotId(slotId){
-    if(!slotId || typeof slotId!=='string') return null;
-    const [rawDay, ...timeParts]=slotId.split('-');
-    if(!rawDay || !timeParts.length) return null;
-    const day=rawDay.trim().toUpperCase();
-    const time=timeParts.join('-').trim().toUpperCase();
-    const weekday=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'].indexOf(day);
-    if(weekday<0) return null;
-    const mt=time.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
-    if(!mt) return null;
-    let hour=Number(mt[1]);
-    const minute=Number(mt[2]);
-    const mer=mt[3].toUpperCase();
-    if(mer==='PM' && hour!==12) hour+=12;
-    if(mer==='AM' && hour===12) hour=0;
-    return { day, weekday, timeLabel:`${mt[1]}:${mt[2]} ${mer}`, hour, minute };
-}
-function getUpcomingWeekdayDate(baseDate,targetWeekday){
-    const next=new Date(baseDate);
-    next.setHours(0,0,0,0);
-    const daysAhead=(targetWeekday-next.getDay()+7)%7;
-    next.setDate(next.getDate()+daysAhead);
-    return next;
-}
-function formatDateTimeForRequest(slotId,closedate){
-    const slot=parseSlotId(slotId);
-    if(!slot || !closedate) return slotId || '';
-    const eventDate=getUpcomingWeekdayDate(closedate,slot.weekday);
-    eventDate.setHours(slot.hour,slot.minute,0,0);
-    const dateText=eventDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-    return `${dateText} - ${slot.timeLabel}`;
-}
-function generateRequestId(){
-    const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code='';
-    for(let i=0;i<10;i+=1) code+=chars[Math.floor(Math.random()*chars.length)];
-    return `UP_PSS-AMSY-${code}`;
-}
-async function mergeRequestsToSupabaseIfClosed(){
-    if(hasAttemptedClosedateMerge || !scheduleWindow.closedate || Object.keys(allRequests).length===0) return;
-    const now=new Date();
-    if(now<scheduleWindow.closedate) return;
-    hasAttemptedClosedateMerge=true;
-    const grouped={};
-    Object.values(allRequests).forEach((req={})=>{
-        const slots=Array.isArray(req.slot_ids)&&req.slot_ids.length?req.slot_ids:(req.slot_id?[req.slot_id]:[]);
-        const residentMail=getResidentEmail(req);
-        if(!residentMail || !slots.length) return;
-        slots.forEach((slotId)=>{
-            const key=`${residentMail}__${slotId}`;
-            if(!grouped[key]) grouped[key]={ residentMail, slotId, applicantSet:new Set(), residentNote:req.resident_note||req.note||'', location:req.location||'' };
-            const applicantMail=getApplicantEmail(req);
-            if(applicantMail) grouped[key].applicantSet.add(applicantMail);
-            if(!grouped[key].residentNote && (req.resident_note||req.note)) grouped[key].residentNote=req.resident_note||req.note;
-            if(!grouped[key].location && req.location) grouped[key].location=req.location;
-        });
-    });
-    const payload=Object.values(grouped).map((entry)=>({
-        request_id:generateRequestId(),
-        resident_mail:entry.residentMail,
-        applicants_mail:Array.from(entry.applicantSet).join(','),
-        'Date and time':formatDateTimeForRequest(entry.slotId,scheduleWindow.closedate),
-        resident_note:entry.residentNote || null,
-        location:entry.location || null
-    }));
-    if(!payload.length) return;
-    const localMergeKey=`requests-merged-${scheduleWindow.closedate.toISOString()}`;
-    if(localStorage.getItem(localMergeKey)==='done') return;
-    const {error}=await supabaseClient.from('Requests').insert(payload);
-    if(error){
-        hasAttemptedClosedateMerge=false;
-        console.error('Failed to merge requests into Supabase Requests table:', error);
-        return;
-    }
-    localStorage.setItem(localMergeKey,'done');
-}
 
 function buildGrid(){ let html=''; TIME_SLOTS.forEach((slot,idx)=>{ html += `<tr><td class='time-col'>${slot.s}<br>${slot.e}</td>`; DAYS.forEach(day=>{ const id=`${day.toUpperCase()} - ${slot.s}`; html += `<td><div class='slot unavailable' id='${id}' data-idx='${idx}'></div></td>`; }); html+='</tr>';}); document.getElementById('grid-body').innerHTML=html; }
 
@@ -230,16 +141,7 @@ document.getElementById('statusFilters').addEventListener('click',(e)=>{ const b
 buildGrid();
 Promise.all([fetchApplicantQuota(), checkMaintenanceSetting()]).then(([q])=>{ applicantQuota=q; });
 const requestsRef=ref(db,'requests');
-const requestSchedRef=ref(db,'requestsched');
-onValue(requestSchedRef,(snap)=>{
-    const val=snap.val()||{};
-    scheduleWindow.opendate=parseScheduleDate(val.opendate);
-    scheduleWindow.closedate=parseScheduleDate(val.closedate);
-    if(scheduleWindow.closedate && new Date()>=scheduleWindow.closedate){
-        mergeRequestsToSupabaseIfClosed();
-    }
-});
-onValue(requestsRef,(snap)=>{ allRequests=snap.val()||{}; renderAll(); mergeRequestsToSupabaseIfClosed(); document.getElementById('grid-loader').style.display='none'; });
+onValue(requestsRef,(snap)=>{ allRequests=snap.val()||{}; renderAll(); document.getElementById('grid-loader').style.display='none'; });
 </script>
 </body>
 </html>
