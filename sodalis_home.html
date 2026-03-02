@@ -7,17 +7,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { 
-            --primary: #531C79; 
-            --bg: #F8FAFC; 
-            --border: #E2E8F0; 
-            --text-sub: #64748b; 
+        :root {
+            --primary: #531C79;
+            --bg: #F8FAFC;
+            --border: #E2E8F0;
+            --text-sub: #64748b;
         }
-        
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: var(--bg); 
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
             min-height: 100vh;
             padding: 40px 30px;
         }
@@ -45,25 +45,77 @@
         }
 
         .panel-card {
-            background: white;
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            background: linear-gradient(145deg, #ffffff 0%, #f8f5ff 100%);
+            border: 1px solid #e8dff4;
+            border-radius: 24px;
+            padding: 28px;
+            box-shadow: 0 10px 26px -18px rgba(83, 28, 121, 0.6);
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-card::before {
+            content: '';
+            position: absolute;
+            inset: -40% auto auto -20%;
+            width: 220px;
+            height: 220px;
+            background: radial-gradient(circle, rgba(126, 58, 163, 0.16) 0%, rgba(126, 58, 163, 0) 72%);
+            pointer-events: none;
         }
 
         .panel-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 12px 24px -4px rgba(83, 28, 121, 0.15);
+            box-shadow: 0 20px 32px -14px rgba(83, 28, 121, 0.28);
             border-color: var(--primary);
+        }
+
+        .panel-card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            gap: 12px;
+        }
+
+        .panel-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            font-size: 16px;
+            background: rgba(83, 28, 121, 0.11);
         }
 
         .panel-title {
             font-size: 20px;
             font-weight: 800;
             color: var(--primary);
-            margin-bottom: 16px;
+            margin-bottom: 0;
+        }
+
+        .panel-badge {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            border-radius: 999px;
+            padding: 7px 12px;
+            color: #5b3a78;
+            background: #efe6fb;
         }
 
         .panel-grid {
@@ -79,16 +131,17 @@
         }
 
         .panel-item {
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 14px 16px;
-            background: #fff;
+            border: 1px solid #eadff5;
+            border-radius: 16px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 8px 18px -18px rgba(60, 16, 90, 0.8);
         }
 
         .panel-item h4 {
             font-size: 14px;
             font-weight: 800;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             color: #0f172a;
         }
 
@@ -97,6 +150,27 @@
             color: var(--text-sub);
             line-height: 1.5;
             word-break: break-word;
+        }
+
+        .notification-card {
+            border-left: 4px solid #8a38c3;
+        }
+
+        .agenda-card {
+            border-left: 4px solid #2563eb;
+        }
+
+        .agenda-date {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #eaf1ff;
+            color: #2455bf;
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 6px;
         }
 
         .loading-bar {
@@ -191,13 +265,25 @@
 
         <div class="panel-grid">
             <div class="panel-card">
-                <div class="panel-title">Notification</div>
+                <div class="panel-header">
+                    <div class="panel-title-wrap">
+                        <span class="panel-icon">🔔</span>
+                        <div class="panel-title">Notification</div>
+                    </div>
+                    <span class="panel-badge">Latest</span>
+                </div>
                 <div id="notificationLoader" class="loading-bar"></div>
                 <div id="notificationList" class="panel-list"></div>
             </div>
 
             <div class="panel-card">
-                <div class="panel-title">Upcoming Agenda</div>
+                <div class="panel-header">
+                    <div class="panel-title-wrap">
+                        <span class="panel-icon">🗓️</span>
+                        <div class="panel-title">Upcoming Agenda</div>
+                    </div>
+                    <span class="panel-badge">Next Events</span>
+                </div>
                 <div id="agendaLoader" class="loading-bar"></div>
                 <div id="agendaList" class="panel-list"></div>
             </div>
@@ -213,11 +299,11 @@
         // Load user data from localStorage/sessionStorage
         function loadUserData() {
             let userProfile = null;
-            
+
             // Try sessionStorage first, then localStorage
             const sessionProfile = sessionStorage.getItem('userProfile');
             const localProfile = localStorage.getItem('userProfile');
-            
+
             if (sessionProfile) {
                 userProfile = JSON.parse(sessionProfile);
             } else if (localProfile) {
@@ -229,10 +315,10 @@
                 const email = userProfile.userEmail || localStorage.getItem('userEmail') || '';
                 const category = userProfile.userClassification || '';
                 const batch = userProfile['Batch'] || '';
-                
+
                 // Update welcome message
                 document.getElementById('welcomeTitle').textContent = `Welcome, ${fullName}!`;
-                
+
                 // Display user info - replace email with category
                 const userDetails = document.getElementById('userDetails');
                 userDetails.innerHTML = `
@@ -253,7 +339,7 @@
                     </div>
                     ` : ''}
                 `;
-                
+
                 document.getElementById('userInfoSection').style.display = 'block';
             }
         }
@@ -270,24 +356,25 @@
                     .limit(3);
                 if (error) throw error;
                 if (!data || data.length === 0) {
-                    list.innerHTML = '<div class="panel-item"><p>No upcoming agenda.</p></div>';
+                    list.innerHTML = '<div class="panel-item agenda-card"><p>No upcoming agenda.</p></div>';
                     return;
                 }
                 data.forEach(item => {
                     const start = item.start_date ? new Date(item.start_date) : null;
                     const end = item.end_date ? new Date(item.end_date) : null;
+                    const sameDay = start && end && start.toDateString() === end.toDateString();
                     const dateText = start
-                        ? `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${end ? ` - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`
+                        ? `${start.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}${end && !sameDay ? ` - ${end.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : ''}`
                         : 'TBD';
                     list.insertAdjacentHTML('beforeend', `
-                        <div class="panel-item">
+                        <div class="panel-item agenda-card">
                             <h4>${item.agenda || 'Agenda Item'}</h4>
-                            <p>${dateText}</p>
+                            <span class="agenda-date">📅 ${dateText}</span>
                         </div>
                     `);
                 });
             } catch (err) {
-                list.innerHTML = '<div class="panel-item"><p>Unable to load agenda.</p></div>';
+                list.innerHTML = '<div class="panel-item agenda-card"><p>Unable to load agenda.</p></div>';
             } finally {
                 loader.style.display = 'none';
             }
@@ -307,19 +394,19 @@
 
                 if (error) throw error;
                 if (!data || data.length === 0) {
-                    list.innerHTML = '<div class="panel-item"><p>No notifications yet.</p></div>';
+                    list.innerHTML = '<div class="panel-item notification-card"><p>No notifications yet.</p></div>';
                     return;
                 }
                 data.forEach(item => {
                     list.insertAdjacentHTML('beforeend', `
-                        <div class="panel-item">
+                        <div class="panel-item notification-card">
                             <h4>${item.title || item.notifname || 'Notification'}</h4>
                             <p>${item.content || 'No details available.'}</p>
                         </div>
                     `);
                 });
             } catch (err) {
-                list.innerHTML = '<div class="panel-item"><p>Unable to load notifications.</p></div>';
+                list.innerHTML = '<div class="panel-item notification-card"><p>Unable to load notifications.</p></div>';
             } finally {
                 loader.style.display = 'none';
             }
