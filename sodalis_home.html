@@ -362,8 +362,9 @@
                 data.forEach(item => {
                     const start = item.start_date ? new Date(item.start_date) : null;
                     const end = item.end_date ? new Date(item.end_date) : null;
+                    const sameDay = start && end && start.toDateString() === end.toDateString();
                     const dateText = start
-                        ? `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${end ? ` - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`
+                        ? `${start.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}${end && !sameDay ? ` - ${end.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : ''}`
                         : 'TBD';
                     list.insertAdjacentHTML('beforeend', `
                         <div class="panel-item agenda-card">
