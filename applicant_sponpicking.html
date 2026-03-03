@@ -39,9 +39,17 @@
             box-shadow: 0 12px 30px rgba(0,0,0,0.3); cursor: pointer;
             transition: transform 0.2s ease;
         }
+        .icon-btn:hover { transform: translateY(-2px) scale(1.02); }
         .icon-btn:active { transform: scale(0.9); }
         .btn-x { color: #ff3b30; }
-        .btn-owl { background: var(--purple); color: var(--apple-green); position: relative; }
+        .btn-owl {
+            background: var(--purple); color: var(--apple-green); position: relative;
+            animation: owlPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes owlPulse {
+            0%, 100% { box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+            50% { box-shadow: 0 14px 35px rgba(124,252,0,0.35); }
+        }
         .heart {
             position: absolute; bottom: 80px; color: var(--apple-green);
             font-size: 45px; opacity: 0; pointer-events: none;
@@ -51,7 +59,22 @@
             0% { transform: translateY(0) scale(1); opacity: 1; }
             100% { transform: translateY(-200px) scale(1.5); opacity: 0; }
         }
-        .hero { position: relative; width: 100%; height: 100vh; flex-shrink: 0; background: #222; overflow: hidden; }
+        .hero {
+            position: relative; width: 100%; height: 100vh; flex-shrink: 0;
+            background: #222; overflow: hidden; animation: cardEnter 420ms ease both;
+        }
+        @keyframes cardEnter {
+            from { opacity: 0; transform: translateY(24px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes cardExitLeft {
+            to { opacity: 0; transform: translateX(-120px) rotate(-8deg) scale(0.92); }
+        }
+        @keyframes cardExitRight {
+            to { opacity: 0; transform: translateX(120px) rotate(8deg) scale(0.92); }
+        }
+        .hero.swipe-left, .content.swipe-left { animation: cardExitLeft 260ms ease forwards; }
+        .hero.swipe-right, .content.swipe-right { animation: cardExitRight 260ms ease forwards; }
         .hero img { width: 100%; height: 100%; object-fit: cover; }
         .hero-overlay {
             position: absolute; bottom: 0; width: 100%; padding: 120px 25px 120px;
@@ -60,7 +83,14 @@
         }
         .hero-overlay h1 { margin: 0; font-size: 40px; font-weight: 900; letter-spacing: -1.5px; }
         .batch-badge { display: inline-block; margin-top: 10px; padding: 6px 14px; background: var(--apple-green); color: var(--deep-purple); border-radius: 8px; font-weight: 800; font-size: 13px; text-transform: uppercase; }
-        .content { padding: 40px 25px 160px; background: white; }
+        .content {
+            padding: 40px 25px 160px; background: white;
+            animation: contentRise 520ms ease 80ms both;
+        }
+        @keyframes contentRise {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
         .section-label { color: var(--purple); font-size: 11px; font-weight: 800; text-transform: uppercase; margin-bottom: 12px; display: block; letter-spacing: 1.5px; }
         .bio-para { font-size: 18px; color: #333; line-height: 1.6; margin-bottom: 35px; }
         .pill-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 40px; }
@@ -122,6 +152,7 @@
         // ── State ──────────────────────────────────────────────────────
         let queue  = [];   // shuffled undecided spOWLsors
         let active = null; // currently shown spOWLsor
+        let isAnimating = false;
 
         // ── Helpers ────────────────────────────────────────────────────
 
@@ -209,7 +240,33 @@
             document.getElementById('bottom-nav').style.display = 'flex';
         }
 
-        function handleDecline() { saveDecision('declined');  next(); }
+        function handleDecline() {
+            animateDecision('left', 'declined');
+        }
+
+        function animateDecision(direction, status) {
+            if (isAnimating) return;
+            isAnimating = true;
+
+            const hero = document.querySelector('.hero');
+            const content = document.querySelector('.content');
+            if (!hero || !content) {
+                saveDecision(status);
+                next();
+                isAnimating = false;
+                return;
+            }
+
+            const cls = direction === 'right' ? 'swipe-right' : 'swipe-left';
+            hero.classList.add(cls);
+            content.classList.add(cls);
+
+            setTimeout(() => {
+                saveDecision(status);
+                next();
+                isAnimating = false;
+            }, 260);
+        }
 
         function triggerLike() {
             const heart = document.createElement('span');
@@ -217,8 +274,7 @@
             heart.innerText = 'favorite';
             document.getElementById('owlBtn').appendChild(heart);
             setTimeout(() => heart.remove(), 1000);
-            saveDecision('approved');
-            next();
+            animateDecision('right', 'approved');
         }
 
         // ── Render ─────────────────────────────────────────────────────
