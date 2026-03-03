@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>UP PSS Recruitment – Application Form</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --purple: #5b2d8e; --purple-light: #7c3fb5; --purple-pale: #ede5f8;
+      --green: #2e7d4f; --green-light: #3fa06a;
+      --bg: #f9f7fd; --card: #fff; --text: #1a1a2e;
+      --muted: #6b6b80; --border: #d8cef0; --input-bg: #fdfcff;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden;
+    }
+    body::before {
+      content: ''; position: fixed; top: -200px; right: -200px; width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(91,45,142,0.12) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    body::after {
+      content: ''; position: fixed; bottom: -200px; left: -200px; width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(46,125,79,0.10) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    .page-wrapper { position: relative; z-index: 1; max-width: 700px; margin: 0 auto; padding: 48px 20px 80px; }
+
+    /* ── HEADER ── */
+    .header-card {
+      background: linear-gradient(135deg, var(--purple) 0%, #3a1860 60%, var(--green) 100%);
+      border-radius: 20px; padding: 48px 40px 40px; margin-bottom: 28px;
+      position: relative; overflow: hidden; box-shadow: 0 20px 60px rgba(91,45,142,0.3);
+      animation: slideDown 0.7s cubic-bezier(0.22,1,0.36,1) both;
+    }
+    .header-card::before {
+      content: ''; position: absolute; top: -60px; right: -60px;
+      width: 220px; height: 220px; border-radius: 50%; background: rgba(255,255,255,0.06);
+    }
+    .org-badge {
+      display: inline-block; background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9);
+      font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+      padding: 6px 14px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 20px;
+    }
+    .header-title { font-family: 'Playfair Display', serif; font-size: clamp(26px,5vw,38px); font-weight: 900; color: #fff; line-height: 1.15; margin-bottom: 8px; }
+    .header-title span { color: #b8f5d0; }
+    .header-subtitle { font-size: 13px; color: rgba(255,255,255,0.65); letter-spacing: 1.5px; text-transform: uppercase; font-weight: 500; margin-bottom: 24px; }
+    .header-divider { border: none; border-top: 1px solid rgba(255,255,255,0.15); margin: 20px 0; }
+    .header-body { font-size: 14.5px; color: rgba(255,255,255,0.85); line-height: 1.75; }
+    .header-body p { margin-bottom: 10px; }
+    .contact-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .chip { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 20px; }
+
+    /* ── FORM CARD ── */
+    .form-card {
+      background: var(--card); border-radius: 20px; padding: 40px;
+      box-shadow: 0 4px 30px rgba(91,45,142,0.08); border: 1px solid var(--border);
+      animation: slideUp 0.7s 0.15s cubic-bezier(0.22,1,0.36,1) both;
+    }
+    .section-label { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: var(--purple); margin-bottom: 24px; padding-bottom: 10px; border-bottom: 2px solid var(--purple-pale); display: flex; align-items: center; gap: 10px; }
+    .section-label .dot { width: 8px; height: 8px; background: var(--green-light); border-radius: 50%; flex-shrink: 0; }
+    .field-group { margin-bottom: 26px; }
+    label { display: block; font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+    label .req { color: var(--purple-light); margin-left: 3px; }
+    .field-hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
+    .error-msg { color: #e53e3e; font-size: 11.5px; margin-top: 4px; display: none; }
+
+    input[type="text"], input[type="email"], input[type="tel"],
+    input[type="url"], input[type="date"], textarea {
+      width: 100%; background: var(--input-bg); border: 1.5px solid var(--border);
+      border-radius: 10px; padding: 12px 16px; font-family: 'DM Sans', sans-serif;
+      font-size: 14px; color: var(--text); outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus, textarea:focus { border-color: var(--purple-light); box-shadow: 0 0 0 3px rgba(124,63,181,0.12); }
+    input.error, textarea.error { border-color: #e53e3e; box-shadow: 0 0 0 3px rgba(229,62,62,0.1); }
+    textarea { resize: vertical; min-height: 90px; }
+
+    /* ── CHECKBOXES ── */
+    .check-group { display: flex; flex-wrap: wrap; gap: 10px; }
+    .check-option { display: flex; align-items: center; gap: 8px; background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 14px; cursor: pointer; font-size: 13.5px; font-weight: 500; transition: all 0.15s; user-select: none; }
+    .check-option:has(input:checked) { border-color: var(--purple-light); background: var(--purple-pale); color: var(--purple); }
+    .check-option input { accent-color: var(--purple-light); width: 15px; height: 15px; }
+
+    .form-divider { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+    /* ── PHOTO ZONE ── */
+    .photo-zone {
+      border: 2px dashed var(--border); border-radius: 16px; padding: 36px 20px;
+      text-align: center; background: var(--input-bg); cursor: pointer;
+      transition: all 0.25s; position: relative;
+    }
+    .photo-zone:hover:not(.uploading):not(.success) { border-color: var(--purple-light); background: var(--purple-pale); }
+    .photo-zone.drag-over { border-color: var(--purple-light); background: var(--purple-pale); }
+    .photo-zone.uploading { border-color: var(--purple-light); background: var(--purple-pale); cursor: wait; }
+    .photo-zone.success { border-color: var(--green-light); background: #f0fdf4; border-style: solid; cursor: default; }
+    .photo-zone.photo-error { border-color: #e53e3e; background: #fff5f5; }
+    .photo-zone input[type="file"] { display: none; }
+
+    #photo-preview { display: none; width: 120px; height: 120px; border-radius: 14px; object-fit: cover; margin: 0 auto 16px; border: 3px solid var(--purple-pale); box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+    .photo-zone.success #photo-preview { border-color: #86efac; }
+
+    .photo-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+    .photo-main-text { font-size: 15px; font-weight: 700; color: var(--purple); margin-bottom: 4px; }
+    .photo-zone.uploading .photo-main-text { color: var(--purple-light); }
+    .photo-zone.success .photo-main-text { color: var(--green); }
+    .photo-zone.photo-error .photo-main-text { color: #e53e3e; }
+    .photo-sub-text { font-size: 12.5px; color: var(--muted); }
+
+    .progress-wrap { width: 80%; max-width: 300px; background: #e9d5ff; border-radius: 99px; height: 5px; margin: 14px auto 0; display: none; overflow: hidden; }
+    .photo-zone.uploading .progress-wrap { display: block; }
+    .progress-bar { height: 100%; background: linear-gradient(90deg, var(--purple), var(--green-light)); border-radius: 99px; width: 0%; transition: width 0.3s ease; }
+
+    .change-photo-btn {
+      display: none; margin-top: 14px; padding: 7px 16px;
+      background: transparent; border: 1.5px solid var(--border);
+      border-radius: 8px; font-family: 'DM Sans', sans-serif;
+      font-size: 12.5px; font-weight: 500; color: var(--muted); cursor: pointer;
+      transition: all 0.15s;
+    }
+    .change-photo-btn:hover { border-color: var(--purple-light); color: var(--purple); }
+
+    /* ── LOADING OVERLAY ── */
+    .loading-overlay {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(15, 5, 30, 0.75); backdrop-filter: blur(6px);
+      align-items: center; justify-content: center; flex-direction: column; gap: 20px;
+    }
+    .loading-overlay.active { display: flex; }
+    .loading-card {
+      background: #fff; border-radius: 20px; padding: 40px 48px;
+      text-align: center; box-shadow: 0 30px 80px rgba(0,0,0,0.3);
+      max-width: 320px; width: 90%;
+      animation: popIn 0.35s cubic-bezier(0.22,1,0.36,1);
+    }
+    @keyframes popIn { from { opacity:0; transform: scale(0.85); } to { opacity:1; transform: scale(1); } }
+    .loading-spinner {
+      width: 52px; height: 52px; border-radius: 50%; margin: 0 auto 20px;
+      border: 4px solid var(--purple-pale);
+      border-top-color: var(--purple);
+      animation: spin 0.8s linear infinite;
+    }
+    .loading-step-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; color: var(--purple); margin-bottom: 6px; }
+    .loading-step-sub { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+    /* Progress steps */
+    .steps-row { display: flex; justify-content: center; gap: 8px; margin-top: 20px; }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+    .step-dot.active { background: var(--purple); }
+    .step-dot.done { background: var(--green-light); }
+
+    /* ── SUBMIT BUTTON ── */
+    .submit-btn {
+      width: 100%; padding: 18px 24px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--green) 100%);
+      color: #fff; font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 700;
+      border: none; border-radius: 14px; cursor: pointer; margin-top: 36px;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 8px 30px rgba(91,45,142,0.35);
+      letter-spacing: 0.3px;
+    }
+    .submit-btn:hover { opacity: 0.93; transform: translateY(-2px); box-shadow: 0 14px 40px rgba(91,45,142,0.4); }
+    .submit-btn:active { transform: translateY(0); }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ── SUCCESS ── */
+    #successMsg { display: none; text-align: center; padding: 48px 20px; }
+
+    .footer { text-align: center; margin-top: 32px; font-size: 12.5px; color: var(--muted); }
+    .footer strong { color: var(--purple); }
+
+    @keyframes slideDown { from { opacity:0; transform:translateY(-30px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes slideUp   { from { opacity:0; transform:translateY(30px);  } to { opacity:1; transform:translateY(0); } }
+    @keyframes spin      { to { transform:rotate(360deg); } }
+    @media (max-width: 480px) { .header-card, .form-card { padding: 28px 22px; } }
+  </style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-card">
+    <div class="loading-spinner"></div>
+    <div class="loading-step-title" id="loadingTitle">Preparing…</div>
+    <div class="loading-step-sub" id="loadingSub">Please wait</div>
+    <div class="steps-row">
+      <div class="step-dot" id="step1"></div>
+      <div class="step-dot" id="step2"></div>
+      <div class="step-dot" id="step3"></div>
+    </div>
+  </div>
+</div>
+
+<div class="page-wrapper">
+
+  <!-- Header -->
+  <div class="header-card">
+    <div class="org-badge">UP Pabvlvm Scientia Sodalitas</div>
+    <div class="header-title">Are you ready to enter<br><span>the spotlight?</span> ✨</div>
+    <div class="header-subtitle">A.Y. 2025–2026 · Second Semester Recruitment</div>
+    <hr class="header-divider"/>
+    <div class="header-body">
+      <p>Good day, Future Applicant! ☀️🙌🏻</p>
+      <p>By submitting this application form, you are officially recognized as a bona fide applicant of the Second Semester Recruitment Process of UP Pabvlvm Scientia Sodalitas A.Y. 2025–2026. 🥳👏🏻</p>
+      <p>Should you have any questions, please do not hesitate to reach out to our officers:</p>
+    </div>
+    <div class="contact-chips">
+      <span class="chip">🏛 Erik Tolosa — VP Internal</span>
+      <span class="chip">👥 Darrielle Garibay</span>
+      <span class="chip">👥 Andreu Autos</span>
+      <span class="chip">👥 Angela Manalo</span>
+      <span class="chip">👥 Rafael Magnaye</span>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="form-card">
+    <form id="applicationForm" novalidate>
+
+      <!-- ── PERSONAL ── -->
+      <div class="section-label"><span class="dot"></span>Personal Information</div>
+
+      <div class="field-group">
+        <label for="f-email">Email Address <span class="req">*</span></label>
+        <input type="email" id="f-email" placeholder="yourname@up.edu.ph"/>
+        <div class="field-hint">Kindly use your UPMAIL.</div>
+        <div class="error-msg" id="err-email">Please enter a valid email address.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-name">Name (SURNAME, First Name, Middle Initial) <span class="req">*</span></label>
+        <input type="text" id="f-name" placeholder="DELA CRUZ, Juan M."/>
+        <div class="field-hint">e.g. DELA CRUZ, Juan M.</div>
+        <div class="error-msg" id="err-name">Please enter your full name.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-nickname">Nickname</label>
+        <input type="text" id="f-nickname" placeholder="e.g. Juan"/>
+      </div>
+
+      <div class="field-group">
+        <label>Preferred Honorifics <span class="req">*</span></label>
+        <div class="check-group">
+          <label class="check-option"><input type="checkbox" name="honorifics" value="Mr."/> Mr.</label>
+          <label class="check-option"><input type="checkbox" name="honorifics" value="Ms."/> Ms.</label>
+          <label class="check-option"><input type="checkbox" name="honorifics" value="Mx."/> Mx.</label>
+        </div>
+        <div class="error-msg" id="err-honorifics">Please select at least one honorific.</div>
+      </div>
+
+      <div class="field-group">
+        <label>Preferred Pronouns <span class="req">*</span></label>
+        <div class="check-group">
+          <label class="check-option"><input type="checkbox" name="pronouns" value="He/Him"/> He/Him</label>
+          <label class="check-option"><input type="checkbox" name="pronouns" value="She/Her"/> She/Her</label>
+          <label class="check-option"><input type="checkbox" name="pronouns" value="They/Them"/> They/Them</label>
+        </div>
+        <div class="error-msg" id="err-pronouns">Please select at least one pronoun set.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-bday">Birthday <span class="req">*</span></label>
+        <input type="date" id="f-bday"/>
+        <div class="error-msg" id="err-bday">Please enter your birthday.</div>
+      </div>
+
+      <hr class="form-divider"/>
+
+      <!-- ── ACADEMIC ── -->
+      <div class="section-label"><span class="dot"></span>Academic Information</div>
+
+      <div class="field-group">
+        <label for="f-batch">Batch in the University <span class="req">*</span></label>
+        <input type="text" id="f-batch" placeholder="e.g. 2025"/>
+        <div class="field-hint">Exclude the word BATCH.</div>
+        <div class="error-msg" id="err-batch">Please enter your batch year.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-degree">Degree Program <span class="req">*</span></label>
+        <input type="text" id="f-degree" placeholder="e.g. BS Food Science and Technology"/>
+        <div class="field-hint">Do NOT ABBREVIATE.</div>
+        <div class="error-msg" id="err-degree">Please enter your degree program.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-affiliations">Other Affiliations</label>
+        <textarea id="f-affiliations" placeholder="Organizations/Fraternities/Sororities that are UPLB affiliated. Leave blank if none."></textarea>
+        <div class="field-hint">UPLB-affiliated organizations, fraternities, or sororities.</div>
+      </div>
+
+      <hr class="form-divider"/>
+
+      <!-- ── CONTACT ── -->
+      <div class="section-label"><span class="dot"></span>Contact Details</div>
+
+      <div class="field-group">
+        <label for="f-address">Current Address <span class="req">*</span></label>
+        <input type="text" id="f-address" placeholder="e.g. Men's Residence Hall, UPLB"/>
+        <div class="error-msg" id="err-address">Please enter your current address.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-contact">Contact Number <span class="req">*</span></label>
+        <input type="tel" id="f-contact" placeholder="e.g. 09XX XXX XXXX"/>
+        <div class="error-msg" id="err-contact">Please enter your contact number.</div>
+      </div>
+
+      <div class="field-group">
+        <label for="f-facebook">Facebook Profile Link <span class="req">*</span></label>
+        <input type="url" id="f-facebook" placeholder="https://facebook.com/yourprofile"/>
+        <div class="error-msg" id="err-facebook">Please enter your Facebook profile link.</div>
+      </div>
+
+      <hr class="form-divider"/>
+
+      <!-- ── PHOTO (bottom) ── -->
+      <div class="section-label"><span class="dot"></span>Profile Photo</div>
+
+      <div class="field-group">
+        <label>Picture <span class="req">*</span></label>
+        <div class="field-hint" style="margin-bottom:10px;">
+          Select your photo — it will be saved automatically. Photo will be named after your full name.
+        </div>
+
+        <div class="photo-zone" id="photoZone" onclick="triggerPhotoInput()">
+          <input type="file" accept="image/*" id="photoFileInput"/>
+          <img id="photo-preview" alt="Preview"/>
+          <span class="photo-icon" id="photoIcon">📷</span>
+          <div class="photo-main-text" id="photoMainText">Click or drag & drop your photo here</div>
+          <div class="photo-sub-text" id="photoSubText">Square size recommended · JPG, PNG, WEBP</div>
+          <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+        </div>
+
+        <div style="text-align:center;">
+          <button type="button" class="change-photo-btn" id="changePhotoBtn" onclick="resetPhoto()">
+            🔄 Change Photo
+          </button>
+        </div>
+
+        <div class="error-msg" id="err-photo">Please select and upload a photo before submitting.</div>
+      </div>
+
+      <!-- ── SINGLE SUBMIT ── -->
+      <button type="submit" class="submit-btn" id="submitBtn">
+        Submit Application 💜💚
+      </button>
+
+    </form>
+
+    <div id="successMsg">
+      <div style="font-size:60px; margin-bottom:18px;">🎉</div>
+      <div style="font-family:'Playfair Display',serif; font-size:28px; font-weight:900; color:var(--purple); margin-bottom:12px;">Application Submitted!</div>
+      <div style="color:var(--muted); font-size:15px; line-height:1.9;">
+        Thank you for applying to<br/>
+        <strong style="color:var(--purple); font-size:16px;">UP Pabvlvm Scientia Sodalitas</strong><br/>
+        A.Y. 2025–2026 💜💚<br/><br/>
+        We'll be in touch soon!
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>💜 <strong>UP Pabvlvm Scientia Sodalitas</strong> · A.Y. 2025–2026 💚</p>
+    <p style="margin-top:6px">Thank you for your interest in joining our organization!</p>
+  </div>
+</div>
+
+<script>
+  // ── HARDCODED CONFIG ─────────────────────────────────────────
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRKymFc4mRt7dFkL-5mcrRUm3kRTMykP_gte9vNS5hXrlY8cbSw6rGzWpnA5AUALF-ig/exec';
+  const FORM_URL        = 'https://docs.google.com/forms/d/e/1FAIpQLSd5CMrT47oghEPiTIjmMmastgfwJ80ovMl2sBQZ_wLfHN-3QA/formResponse';
+
+  // ── PHOTO STATE ──────────────────────────────────────────────
+  let photoFile        = null;
+  let uploadedDriveUrl = '';
+  let uploadedFileId   = '';
+  let isUploading      = false;
+  let progressInterval = null;
+
+  // ── PHOTO ZONE HELPERS ───────────────────────────────────────
+  function triggerPhotoInput() {
+    if (isUploading) return;
+    if (uploadedDriveUrl) return; // already done — use Change Photo btn
+    document.getElementById('photoFileInput').click();
+  }
+
+  function setPhotoZone(state, main, sub) {
+    const zone = document.getElementById('photoZone');
+    zone.className = 'photo-zone' + (state ? ' ' + state : '');
+    if (main !== undefined) document.getElementById('photoMainText').textContent = main;
+    if (sub  !== undefined) document.getElementById('photoSubText').textContent  = sub;
+  }
+
+  function resetPhoto() {
+    // Keep old fileId so it gets trashed on next upload
+    uploadedDriveUrl = '';
+    photoFile        = null;
+    document.getElementById('photoFileInput').value = '';
+    document.getElementById('photo-preview').style.display  = 'none';
+    document.getElementById('photoIcon').style.display      = 'block';
+    document.getElementById('changePhotoBtn').style.display = 'none';
+    document.getElementById('progressBar').style.width      = '0%';
+    setPhotoZone('', 'Click or drag & drop your photo here', 'Square size recommended · JPG, PNG, WEBP');
+  }
+
+  // ── FILE SELECTED → AUTO UPLOAD ─────────────────────────────
+  document.getElementById('photoFileInput').addEventListener('change', async function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    photoFile = file;
+
+    // Instant preview
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.getElementById('photo-preview');
+      img.src = ev.target.result;
+      img.style.display = 'block';
+      document.getElementById('photoIcon').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+
+    await uploadPhotoToDrive(file);
+  });
+
+  async function uploadPhotoToDrive(file) {
+    isUploading = true;
+    uploadedDriveUrl = '';
+    document.getElementById('err-photo').style.display = 'none';
+
+    const rawName  = document.getElementById('f-name').value.trim();
+    const ext      = file.name.split('.').pop();
+    const filename = rawName ? rawName + '.' + ext : file.name;
+
+    setPhotoZone('uploading', 'Uploading to Drive…', filename);
+    startProgress();
+
+    const base64 = await fileToBase64(file);
+    const params = new URLSearchParams({
+      data:      base64,
+      mimeType:  file.type,
+      filename:  filename,
+      oldFileId: uploadedFileId
+    });
+
+    try {
+      // STEP 1: POST upload with no-cors (org accounts block reading POST response)
+      // The file uploads successfully even though we cannot read the response.
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode:   'no-cors',
+        body:   params
+      });
+
+      // STEP 2: GET request to retrieve the Drive URL by filename
+      // GET responses from Apps Script do NOT have CORS issues.
+      setPhotoZone('uploading', 'Getting Drive link…', filename);
+      await new Promise(r => setTimeout(r, 1500)); // brief wait for Drive to index
+
+      let driveUrl = '';
+      let fileId   = '';
+      let attempts = 0;
+      const maxAttempts = 5;
+
+      while (attempts < maxAttempts && !driveUrl) {
+        attempts++;
+        try {
+          const getRes  = await fetch(APPS_SCRIPT_URL + '?action=getUrl&filename=' + encodeURIComponent(filename));
+          const getJson = await getRes.json();
+          if (getJson.success && getJson.url) {
+            driveUrl = getJson.url;
+            fileId   = getJson.fileId || '';
+          } else if (attempts < maxAttempts) {
+            await new Promise(r => setTimeout(r, 1500)); // wait and retry
+          }
+        } catch(e) {
+          if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+
+      stopProgress(true);
+
+      if (driveUrl) {
+        uploadedDriveUrl = driveUrl;
+        uploadedFileId   = fileId;
+        setPhotoZone('success', '✅ Photo saved to Drive!', filename);
+        document.getElementById('changePhotoBtn').style.display = 'inline-block';
+      } else {
+        throw new Error('File uploaded but could not retrieve Drive link. Try resubmitting.');
+      }
+
+    } catch (err) {
+      stopProgress(false);
+      uploadedDriveUrl = '';
+      const msg = err.message || '';
+      setPhotoZone('photo-error', '❌ Upload failed — try again', msg.length < 120 ? msg : 'Check your connection and retry');
+      document.getElementById('changePhotoBtn').style.display = 'inline-block';
+      document.getElementById('changePhotoBtn').textContent = '🔄 Retry';
+      console.error('Drive upload error:', err);
+    }
+
+    isUploading = false;
+  }
+
+  function startProgress() {
+    const bar = document.getElementById('progressBar');
+    bar.style.width = '0%';
+    let w = 0;
+    progressInterval = setInterval(() => {
+      w = Math.min(w + Math.random() * 9, 88);
+      bar.style.width = w + '%';
+    }, 220);
+  }
+  function stopProgress(success) {
+    clearInterval(progressInterval);
+    document.getElementById('progressBar').style.width = success ? '100%' : '0%';
+  }
+
+  // ── DRAG & DROP ──────────────────────────────────────────────
+  const pz = document.getElementById('photoZone');
+  pz.addEventListener('dragover', e => { e.preventDefault(); if (!isUploading && !uploadedDriveUrl) pz.classList.add('drag-over'); });
+  pz.addEventListener('dragleave', () => pz.classList.remove('drag-over'));
+  pz.addEventListener('drop', e => {
+    e.preventDefault(); pz.classList.remove('drag-over');
+    if (isUploading || uploadedDriveUrl) return;
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const dt = new DataTransfer(); dt.items.add(file);
+      document.getElementById('photoFileInput').files = dt.files;
+      document.getElementById('photoFileInput').dispatchEvent(new Event('change'));
+    }
+  });
+
+  // ── UTILS ────────────────────────────────────────────────────
+  function fileToBase64(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+  function showErr(id, el) { document.getElementById(id).style.display = 'block'; if (el) el.classList.add('error'); }
+  function hideErr(id, el) { document.getElementById(id).style.display = 'none';  if (el) el.classList.remove('error'); }
+  document.querySelectorAll('input, textarea').forEach(el =>
+    ['input','change'].forEach(ev => el.addEventListener(ev, () => el.classList.remove('error')))
+  );
+
+  // ── LOADING OVERLAY ──────────────────────────────────────────
+  function showLoading(step, title, sub) {
+    document.getElementById('loadingOverlay').classList.add('active');
+    document.getElementById('loadingTitle').textContent = title;
+    document.getElementById('loadingSub').textContent   = sub;
+    [1,2,3].forEach(i => {
+      const dot = document.getElementById('step' + i);
+      dot.className = 'step-dot' + (i < step ? ' done' : i === step ? ' active' : '');
+    });
+  }
+  function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('active');
+  }
+
+  // ── SINGLE SUBMIT HANDLER ────────────────────────────────────
+  document.getElementById('applicationForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    // ── 1. VALIDATE ──
+    let ok = true;
+
+    const email    = document.getElementById('f-email');
+    const name     = document.getElementById('f-name');
+    const bday     = document.getElementById('f-bday');
+    const batch    = document.getElementById('f-batch');
+    const degree   = document.getElementById('f-degree');
+    const address  = document.getElementById('f-address');
+    const contact  = document.getElementById('f-contact');
+    const facebook = document.getElementById('f-facebook');
+    const honorChecked  = document.querySelectorAll('input[name="honorifics"]:checked');
+    const pronounChecked = document.querySelectorAll('input[name="pronouns"]:checked');
+
+    if (!email.value.trim() || !/\S+@\S+\.\S+/.test(email.value)) { showErr('err-email', email); ok = false; } else hideErr('err-email', email);
+    if (!name.value.trim())    { showErr('err-name', name);       ok = false; } else hideErr('err-name', name);
+    if (!honorChecked.length)  { showErr('err-honorifics', null); ok = false; } else hideErr('err-honorifics', null);
+    if (!pronounChecked.length){ showErr('err-pronouns',   null); ok = false; } else hideErr('err-pronouns',   null);
+    if (!bday.value)           { showErr('err-bday', bday);       ok = false; } else hideErr('err-bday', bday);
+    if (!batch.value.trim())   { showErr('err-batch', batch);     ok = false; } else hideErr('err-batch', batch);
+    if (!degree.value.trim())  { showErr('err-degree', degree);   ok = false; } else hideErr('err-degree', degree);
+    if (!address.value.trim()) { showErr('err-address', address); ok = false; } else hideErr('err-address', address);
+    if (!contact.value.trim()) { showErr('err-contact', contact); ok = false; } else hideErr('err-contact', contact);
+    if (!facebook.value.trim()){ showErr('err-facebook',facebook);ok = false; } else hideErr('err-facebook',facebook);
+    if (!photoFile)            { showErr('err-photo', null);       ok = false; } else hideErr('err-photo', null);
+
+    if (!ok) {
+      const firstErr = document.querySelector('.error');
+      if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      else document.getElementById('photoZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    document.getElementById('submitBtn').disabled = true;
+
+    // ── 2. UPLOAD PHOTO (if not already uploaded or previously failed) ──
+    if (!uploadedDriveUrl) {
+      showLoading(1, 'Uploading Photo…', 'Saving your photo to Google Drive');
+      await uploadPhotoToDrive(photoFile);
+
+      if (!uploadedDriveUrl) {
+        // Upload failed
+        hideLoading();
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('photoZone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showErr('err-photo', null);
+        document.getElementById('err-photo').textContent = 'Photo upload failed. Please try again.';
+        return;
+      }
+    }
+
+    // ── 3. SUBMIT TO GOOGLE FORMS ──
+    showLoading(2, 'Submitting Form…', 'Sending your application to UP PSS');
+
+    const d = new Date(bday.value);
+    const fd = new FormData();
+    fd.append('entry.1019347517', uploadedDriveUrl);
+    fd.append('entry.613306312',  email.value.trim());
+    fd.append('entry.298235175',  name.value.trim());
+    fd.append('entry.1051452841', document.getElementById('f-nickname').value.trim());
+    honorChecked.forEach(cb  => fd.append('entry.807177182', cb.value));
+    pronounChecked.forEach(cb => fd.append('entry.699938541', cb.value));
+    fd.append('entry.733914875',        batch.value.trim());
+    fd.append('entry.222310845',        degree.value.trim());
+    fd.append('entry.823731059',        address.value.trim());
+    fd.append('entry.1199332141',       contact.value.trim());
+    fd.append('entry.1403791620_year',  d.getFullYear());
+    fd.append('entry.1403791620_month', d.getMonth() + 1);
+    fd.append('entry.1403791620_day',   d.getUTCDate());
+    fd.append('entry.2104905397',       document.getElementById('f-affiliations').value.trim());
+    fd.append('entry.1389513429',       facebook.value.trim());
+    fd.append('fvv', '1');
+    fd.append('fbzx', '-5668940661350973825');
+    fd.append('pageHistory', '0');
+
+    try {
+      await fetch(FORM_URL, { method: 'POST', mode: 'no-cors', body: fd });
+    } catch (_) {}
+
+    // ── 4. DONE ──
+    showLoading(3, 'All Done! 🎉', 'Your application has been submitted');
+    await new Promise(r => setTimeout(r, 1200));
+    hideLoading();
+
+    document.getElementById('applicationForm').style.display = 'none';
+    document.getElementById('successMsg').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+</script>
+</body>
+</html>
