@@ -280,7 +280,7 @@
 
     function normalizePictureUrl(value) {
         const url = (value || '').toString().trim();
-        return url || DEFAULT_AVATAR_URL;
+        return url || '';
     }
 
     function getStoredUserName() {
@@ -300,12 +300,21 @@
 
         const { data, error } = await supabaseClient
             .from('Applicants')
-            .select('full_name, Batch, Sponsor, Sponsor_Facebook, Picture, Facebook, code, email')
+            .select('full_name, Batch, Sponsor, Sponsor_Facebook, Picture, picture, Facebook, code, email')
             .eq('full_name', fullName)
             .maybeSingle();
 
-        if (error || !data) return null;
-        return data;
+        if (!error && data) return data;
+
+        const { data: fallbackData, error: fallbackError } = await supabaseClient
+            .from('Applicants')
+            .select('full_name, Batch, Sponsor, Sponsor_Facebook, Picture, picture, Facebook, code, email')
+            .ilike('full_name', fullName)
+            .limit(1)
+            .maybeSingle();
+
+        if (fallbackError || !fallbackData) return null;
+        return fallbackData;
     }
 
     function renderApplicantProfile(profile) {
@@ -322,7 +331,7 @@
         const facebook = profile?.Facebook || '-';
         const sponsorFacebook = profile?.Sponsor_Facebook || '-';
         const code = profile?.code || 'NO_CODE';
-        const picture = normalizePictureUrl(profile?.Picture);
+        const picture = normalizePictureUrl(profile?.Picture || profile?.picture);
         const facebookLink = toLink(facebook);
         const sponsorFacebookLink = toLink(sponsorFacebook);
 
@@ -330,7 +339,7 @@
         document.getElementById('userBatch').textContent = `Batch ${batch}`;
         document.getElementById('userEmail').textContent = email;
         document.getElementById('userSponsor').textContent = sponsor;
-        document.getElementById('userPicture').src = picture;
+        document.getElementById('userPicture').src = picture || DEFAULT_AVATAR_URL;
 
         const fbEl = document.getElementById('userFacebook');
         fbEl.textContent = facebook;
@@ -346,7 +355,8 @@
     }
 
     function renderQrCode(value) {
-        const qrData = (value || '').toString().trim() || 'NO_CODE';
+        const qrCode = (value || '').toString().trim() || 'NO_CODE';
+        const qrData = `http://tiny.cc/${qrCode}`;
         const qr = qrcode(0, 'H');
         qr.addData(qrData);
         qr.make();
