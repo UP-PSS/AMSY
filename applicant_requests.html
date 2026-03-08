@@ -44,6 +44,9 @@
         #request-list { display:grid; gap:10px; }
         .request-card { background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px; }
         .request-card .row { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+        .request-person { display:flex; align-items:center; gap:10px; min-width:0; }
+        .request-avatar { width:36px; height:36px; border-radius:50%; object-fit:cover; border:1px solid #DDD6FE; background:#E9D5FF; flex-shrink:0; }
+        .request-avatar-fallback { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#fff; background:#7C3AED; flex-shrink:0; }
         .status-chip { font-size:10px; font-weight:900; padding:4px 8px; border-radius:999px; text-transform:uppercase; }
 
         #detailsOverlay, .maintenance-overlay { position:fixed; inset:0; background:rgba(15,23,42,.65); display:none; align-items:center; justify-content:center; z-index:1000; }
@@ -108,6 +111,7 @@ async function checkMaintenanceSetting(){ try{ const {data,error}=await supabase
 
 function getSlotParts(slotId){ if(!slotId||typeof slotId!=='string')return null; const [day,time]=slotId.split('-'); if(!day||!time) return null; const match=time.match(/(\d{1,2})(\d{2})(AM|PM)/i); if(!match)return null; return {day:day.trim(), compact: `${match[1]}:${match[2]} ${match[3].toUpperCase()}`}; }
 function formatSlotRange(slotIds){ if(!slotIds?.length) return 'N/A'; return slotIds.join(' | '); }
+function getRequestPhoto(r){ return (r.resident_pic||r.residentPic||r.resident_photo||r.residentPhoto||r.profile_pic||r.profilePic||r.photo_url||r.photoUrl||'').toString().trim(); }
 
 function buildGrid(){ let html=''; TIME_SLOTS.forEach((slot,idx)=>{ html += `<tr><td class='time-col'>${slot.s}<br>${slot.e}</td>`; DAYS.forEach(day=>{ const id=`${day.toUpperCase()} - ${slot.s}`; html += `<td><div class='slot unavailable' id='${id}' data-idx='${idx}'></div></td>`; }); html+='</tr>';}); document.getElementById('grid-body').innerHTML=html; }
 
@@ -125,7 +129,7 @@ Object.entries(countMap).forEach(([slotId,count])=>{ const el=document.getElemen
 function renderRequestList(){ const list=document.getElementById('request-list'); list.innerHTML='';
 const rows=requestsOfApplicant().filter(([,r])=> selectedStatus==='all' || (r.status||'').toLowerCase()===selectedStatus).sort((a,b)=>(b[1].timestamp||0)-(a[1].timestamp||0));
 if(!rows.length){ list.innerHTML="<div class='request-card'>No requests in this filter.</div>"; return; }
-rows.forEach(([id,r])=>{ const st=(r.status||'unknown').toLowerCase(); const chipColor=st==='approved'?'background:#DCFCE7;color:#166534':st==='pending'?'background:#E2E8F0;color:#334155':st==='completed'?'background:#D1FAE5;color:#065F46':'background:#FCE7F3;color:#9D174D'; const slots=r.slot_ids || (r.slot_id?[r.slot_id]:[]); list.insertAdjacentHTML('beforeend',`<div class='request-card'><div class='row'><div><div style='font-size:14px;font-weight:800'>${r.resident||'N/A'}</div><div style='font-size:12px;color:#64748b'>${formatSlotRange(slots)}</div></div><span class='status-chip' style='${chipColor}'>${st}</span></div><div style='font-size:11px;color:#94a3b8;margin-top:8px;'>${r.timestamp?new Date(r.timestamp).toLocaleString():''}</div></div>`);
+rows.forEach(([id,r])=>{ const st=(r.status||'unknown').toLowerCase(); const chipColor=st==='approved'?'background:#DCFCE7;color:#166534':st==='pending'?'background:#E2E8F0;color:#334155':st==='completed'?'background:#D1FAE5;color:#065F46':'background:#FCE7F3;color:#9D174D'; const slots=r.slot_ids || (r.slot_id?[r.slot_id]:[]); const resident=(r.resident||'N/A'); const photo=getRequestPhoto(r); const initials=resident.split(' ').filter(Boolean).slice(0,2).map(v=>v[0]?.toUpperCase()||'').join('')||'R'; const avatar=photo?`<img class='request-avatar' src='${photo}' alt='${resident}'>`:`<span class='request-avatar-fallback'>${initials}</span>`; list.insertAdjacentHTML('beforeend',`<div class='request-card'><div class='row'><div class='request-person'>${avatar}<div><div style='font-size:14px;font-weight:800'>${resident}</div><div style='font-size:12px;color:#64748b'>${formatSlotRange(slots)}</div></div></div><span class='status-chip' style='${chipColor}'>${st}</span></div><div style='font-size:11px;color:#94a3b8;margin-top:8px;'>${r.timestamp?new Date(r.timestamp).toLocaleString():''}</div></div>`);
 });
 }
 

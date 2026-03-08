@@ -143,6 +143,16 @@
             color: var(--primary);
         }
 
+        .detail-value.link {
+            color: #1d4ed8;
+            text-decoration: none;
+            word-break: break-word;
+        }
+
+        .detail-value.link:hover {
+            text-decoration: underline;
+        }
+
         /* QR Section */
         .qr-section {
             padding: 40px;
@@ -214,11 +224,11 @@
     <div class="details-container">
         <div class="detail-item">
             <div class="icon-box">
-                <span class="material-symbols-outlined">verified_user</span>
+                <span class="material-symbols-outlined">mail</span>
             </div>
             <div class="info-content">
-                <span class="detail-label">Sponsor</span>
-                <span class="detail-value" id="userSponsor">-</span>
+                <span class="detail-label">UP Mail</span>
+                <span class="detail-value" id="userEmail">-</span>
             </div>
         </div>
 
@@ -228,17 +238,27 @@
             </div>
             <div class="info-content">
                 <span class="detail-label">Facebook</span>
-                <span class="detail-value" id="userFacebook">-</span>
+                <a class="detail-value link" id="userFacebook" href="#" target="_blank" rel="noopener noreferrer">-</a>
             </div>
         </div>
 
         <div class="detail-item">
             <div class="icon-box">
-                <span class="material-symbols-outlined">pin</span>
+                <span class="material-symbols-outlined">verified_user</span>
             </div>
             <div class="info-content">
-                <span class="detail-label">Code</span>
-                <span class="detail-value" id="userCode">-</span>
+                <span class="detail-label">Sponsor Name</span>
+                <span class="detail-value" id="userSponsor">-</span>
+            </div>
+        </div>
+
+        <div class="detail-item">
+            <div class="icon-box">
+                <span class="material-symbols-outlined">groups</span>
+            </div>
+            <div class="info-content">
+                <span class="detail-label">Sponsor Facebook</span>
+                <a class="detail-value link" id="userSponsorFacebook" href="#" target="_blank" rel="noopener noreferrer">-</a>
             </div>
         </div>
     </div>
@@ -280,7 +300,7 @@
 
         const { data, error } = await supabaseClient
             .from('Applicants')
-            .select('full_name, Batch, Sponsor, Picture, Facebook, code')
+            .select('full_name, Batch, Sponsor, Sponsor_Facebook, Picture, Facebook, code, email')
             .eq('full_name', fullName)
             .maybeSingle();
 
@@ -289,19 +309,38 @@
     }
 
     function renderApplicantProfile(profile) {
+        const toLink = (value) => {
+            const raw = (value || '').toString().trim();
+            if (!raw || raw === '-') return null;
+            return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+        };
+
         const fullName = profile?.full_name || 'Applicant';
         const batch = profile?.Batch || '-';
+        const email = profile?.email || '-';
         const sponsor = profile?.Sponsor || '-';
         const facebook = profile?.Facebook || '-';
-        const code = profile?.code || '-';
+        const sponsorFacebook = profile?.Sponsor_Facebook || '-';
+        const code = profile?.code || 'NO_CODE';
         const picture = normalizePictureUrl(profile?.Picture);
+        const facebookLink = toLink(facebook);
+        const sponsorFacebookLink = toLink(sponsorFacebook);
 
         document.getElementById('userName').textContent = fullName;
         document.getElementById('userBatch').textContent = `Batch ${batch}`;
+        document.getElementById('userEmail').textContent = email;
         document.getElementById('userSponsor').textContent = sponsor;
-        document.getElementById('userFacebook').textContent = facebook;
-        document.getElementById('userCode').textContent = code;
         document.getElementById('userPicture').src = picture;
+
+        const fbEl = document.getElementById('userFacebook');
+        fbEl.textContent = facebook;
+        fbEl.href = facebookLink || '#';
+        fbEl.style.pointerEvents = facebookLink ? 'auto' : 'none';
+
+        const sponsorFbEl = document.getElementById('userSponsorFacebook');
+        sponsorFbEl.textContent = sponsorFacebook;
+        sponsorFbEl.href = sponsorFacebookLink || '#';
+        sponsorFbEl.style.pointerEvents = sponsorFacebookLink ? 'auto' : 'none';
 
         renderQrCode(code);
     }
@@ -325,8 +364,10 @@
             full_name: getStoredUserName() || 'Applicant',
             Batch: '-',
             Sponsor: '-',
+            Sponsor_Facebook: '-',
             Picture: DEFAULT_AVATAR_URL,
             Facebook: '-',
+            email: '-',
             code: 'NO_CODE'
         });
     }
