@@ -464,12 +464,22 @@
         }
 
         function navigateToProfile() {
-            const profileIframe = Array.from(document.querySelectorAll('iframe')).find((iframe) => iframe.src.includes('profile.html'));
-            if (profileIframe && profileIframe.dataset.view) {
-                show(profileIframe.dataset.view);
-                return;
+            const mainContent = document.getElementById('main-content');
+            if (!mainContent) return;
+
+            const viewId = 'my-profile';
+            let profileView = document.getElementById('view-' + viewId);
+
+            if (!profileView) {
+                profileView = document.createElement('div');
+                profileView.id = 'view-' + viewId;
+                profileView.className = 'view';
+                profileView.innerHTML = '<iframe src="applicant_myprofile.html" data-view="' + viewId + '" allow="clipboard-read; clipboard-write; fullscreen" referrerpolicy="no-referrer-when-downgrade"></iframe>';
+                mainContent.appendChild(profileView);
+                attachIframeLoaders();
             }
-            window.location.href = 'profile.html';
+
+            show(viewId);
         }
 
         function setupDesktopProfileMenu() {
