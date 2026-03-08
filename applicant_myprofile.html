@@ -3,134 +3,279 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile</title>
+    <title>Applicant Profile | SodaliSite</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #1e293b; padding: 20px; }
-        .card { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 8px 24px rgba(15,23,42,.08); overflow: hidden; }
-        .head { background: #531C79; color: #fff; padding: 22px; display: flex; align-items: center; gap: 16px; }
-        .avatar { width: 76px; height: 76px; min-width: 76px; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,.2); display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 1.3rem; }
-        .avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .title h1 { font-size: 1.35rem; font-weight: 800; }
-        .title p { font-size: .85rem; opacity: .9; margin-top: 3px; }
-        .content { padding: 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-        .item { background:#f8fafc; border:1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
-        .label { font-size: .72rem; color: #64748b; text-transform: uppercase; font-weight: 800; letter-spacing: .04em; margin-bottom: 6px; }
-        .value { font-size: .95rem; font-weight: 600; word-break: break-word; }
-        .status { max-width:760px; margin: 20px auto; text-align:center; color:#64748b; }
-        .status.error { color: #dc2626; }
+        :root { 
+            --primary: #531C79;  /* Deep Violet */
+            --bg: #F8FAFC;       /* Slate Background */
+            --border: #E2E8F0;   /* Light Border */
+            --text-sub: #49A631; /* Apple Green */
+            --white: #FFFFFF;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            color: #1E293B;
+        }
+
+        .profile-card {
+            background: var(--white);
+            width: 100%;
+            max-width: 550px; 
+            border-radius: 40px;
+            box-shadow: 0 30px 60px -12px rgba(83, 28, 121, 0.15);
+            overflow: hidden;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        /* Top Header Branding */
+        .header-bg {
+            height: 140px;
+            background: var(--primary);
+            position: relative;
+        }
+
+        .photo-wrapper {
+            width: 160px;
+            height: 160px;
+            margin: -80px auto 20px;
+            border-radius: 50%;
+            border: 6px solid var(--white);
+            background: #EDF2F7;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 2;
+        }
+
+        .profile-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .identity {
+            padding: 0 40px;
+            margin-bottom: 30px;
+        }
+
+        .full-name {
+            margin: 0;
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: var(--primary);
+            letter-spacing: -1px;
+        }
+
+        .batch-text {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: var(--text-sub);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Details List using Material Symbols */
+        .details-container {
+            padding: 0 40px 30px;
+            text-align: left;
+        }
+
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 16px;
+            margin-bottom: 12px;
+            background: #FCFDFE;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .icon-box {
+            background: var(--primary);
+            color: var(--text-sub);
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .info-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #64748B;
+            text-transform: uppercase;
+        }
+
+        .detail-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* QR Section */
+        .qr-section {
+            padding: 40px;
+            background-color: #F1F5F9;
+            border-top: 2px dashed var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #qrcode {
+            background: var(--white);
+            padding: 15px;
+            border-radius: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            line-height: 0;
+            border: 4px solid var(--text-sub);
+        }
+
+        #qrcode img {
+            width: 140px;
+            height: 140px;
+        }
+
+        .download-btn {
+            margin-top: 25px;
+            background: var(--text-sub);
+            color: var(--white);
+            border: none;
+            padding: 14px 28px;
+            border-radius: 16px;
+            font-weight: 800;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+        }
+
+        .download-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(73, 166, 49, 0.3);
+        }
+
+        @media (max-width: 500px) {
+            .full-name { font-size: 1.8rem; }
+            .details-container { padding: 0 20px 30px; }
+            .qr-section { padding: 30px 20px; }
+        }
     </style>
 </head>
 <body>
-    <div id="status" class="status">Loading profile...</div>
-    <section id="profileCard" class="card" style="display:none;">
-        <header class="head">
-            <div class="avatar" id="avatar">--</div>
-            <div class="title">
-                <h1 id="full_name">Applicant</h1>
-                <p id="batchLine">Batch: -</p>
+
+<div class="profile-card">
+    <div class="header-bg"></div>
+    
+    <div class="photo-wrapper">
+        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&h=200&auto=format&fit=crop" alt="Profile" class="profile-img">
+    </div>
+
+    <div class="identity">
+        <h2 class="full-name" id="userName">Abel V. Paner Jr.</h2>
+        <span class="batch-text" id="userBatch">Batch 2024-A</span>
+    </div>
+
+    <div class="details-container">
+        <div class="detail-item">
+            <div class="icon-box">
+                <span class="material-symbols-outlined">mail</span>
             </div>
-        </header>
-        <div class="content">
-            <div class="item"><div class="label">full_name</div><div class="value" id="field_full_name">-</div></div>
-            <div class="item"><div class="label">Batch</div><div class="value" id="field_batch">-</div></div>
-            <div class="item"><div class="label">Sponsor</div><div class="value" id="field_sponsor">-</div></div>
-            <div class="item"><div class="label">Picture</div><div class="value" id="field_picture">-</div></div>
-            <div class="item"><div class="label">Facebook</div><div class="value" id="field_facebook">-</div></div>
-            <div class="item"><div class="label">code</div><div class="value" id="field_code">-</div></div>
+            <div class="info-content">
+                <span class="detail-label">Email Address</span>
+                <span class="detail-value">avpaner@up.edu.ph</span>
+            </div>
         </div>
-    </section>
 
-    <script>
-        const SUPABASE_URL = 'https://havsuikahafqciurmaeq.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C';
-        const DEFAULT_AVATAR_URL = 'https://i.ibb.co/XZ4PZk67/icon-1.png';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        <div class="detail-item">
+            <div class="icon-box">
+                <span class="material-symbols-outlined">verified_user</span>
+            </div>
+            <div class="info-content">
+                <span class="detail-label">Sponsor</span>
+                <span class="detail-value">Alpha Rho Section</span>
+            </div>
+        </div>
 
-        function getUserProfile() {
-            const sessionProfile = sessionStorage.getItem('userProfile');
-            const localProfile = localStorage.getItem('userProfile');
-            return sessionProfile ? JSON.parse(sessionProfile) : localProfile ? JSON.parse(localProfile) : null;
-        }
+        <div class="detail-item">
+            <div class="icon-box">
+                <span class="material-symbols-outlined">public</span>
+            </div>
+            <div class="info-content">
+                <span class="detail-label">Facebook Profile</span>
+                <span class="detail-value">fb.com/abel.paner</span>
+            </div>
+        </div>
+    </div>
 
-        function initialsFromName(name) {
-            return (name || 'U').split(' ').map(part => part[0]).join('').toUpperCase().slice(0, 2);
-        }
+    <div class="qr-section">
+        <div id="qrcode"></div>
+        <button class="download-btn" onclick="downloadQR()">
+            <span class="material-symbols-outlined">download</span>
+            Download QR Code
+        </button>
+    </div>
+</div>
 
-        function setAvatar(name, pictureUrl) {
-            const avatar = document.getElementById('avatar');
-            if (!avatar) return;
-            if (pictureUrl) {
-                avatar.innerHTML = `<img src="${pictureUrl}" alt="Avatar" onerror="this.src='${DEFAULT_AVATAR_URL}'">`;
-            } else {
-                avatar.textContent = initialsFromName(name);
-            }
-        }
+<script>
+    // 1. Generate QR Code
+    const qrData = "http://tiny.cc/2025_ACA_PSS";
+    const qr = qrcode(0, 'H');
+    qr.addData(qrData);
+    qr.make();
+    document.getElementById('qrcode').innerHTML = qr.createImgTag(5);
 
-        function fieldValue(row, keys) {
-            for (const key of keys) {
-                if (row && row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
-            }
-            return '';
-        }
+    // 2. Download Logic with your specific filename format
+    function downloadQR() {
+        const fullName = document.getElementById('userName').innerText.trim().replace(/\s+/g, '_');
+        const batch = document.getElementById('userBatch').innerText.replace('Batch ', '').trim().replace(/\s+/g, '_');
+        const fileName = `${batch}_${fullName}_QR.png`;
 
-        async function loadProfile() {
-            const status = document.getElementById('status');
-            const card = document.getElementById('profileCard');
-            const profile = getUserProfile();
-            const fullName = profile?.userName || '';
+        const img = document.querySelector('#qrcode img');
+        const link = document.createElement('a');
+        link.href = img.src;
+        link.download = fileName;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
 
-            if (!fullName) {
-                status.className = 'status error';
-                status.textContent = 'User session not found. Please log in again.';
-                return;
-            }
-
-            const queries = [
-                supabaseClient.from('Applicants').select('full_name, Batch, Sponsor, Picture, Facebook, code').eq('full_name', fullName).maybeSingle(),
-                supabaseClient.from('Applicants').select('full_name, Batch, Sponsor, Picture, Facebook, code').eq('name', fullName).maybeSingle(),
-                supabaseClient.from('Applicants').select('full_name, Batch, Sponsor, Picture, Facebook, code').ilike('full_name', fullName).maybeSingle()
-            ];
-
-            let row = null;
-            for (const query of queries) {
-                const { data, error } = await query;
-                if (!error && data) {
-                    row = data;
-                    break;
-                }
-            }
-
-            if (!row) {
-                status.className = 'status error';
-                status.textContent = 'No applicant record found in Supabase.';
-                return;
-            }
-
-            const name = fieldValue(row, ['full_name', 'name']) || fullName;
-            const batch = fieldValue(row, ['Batch', 'batch']) || '-';
-            const sponsor = fieldValue(row, ['Sponsor', 'sponsor']) || '-';
-            const picture = fieldValue(row, ['Picture', 'picture']) || DEFAULT_AVATAR_URL;
-            const facebook = fieldValue(row, ['Facebook', 'facebook']) || '-';
-            const code = fieldValue(row, ['code', 'Code']) || '-';
-
-            document.getElementById('full_name').textContent = name;
-            document.getElementById('batchLine').textContent = `Batch: ${batch}`;
-            document.getElementById('field_full_name').textContent = name;
-            document.getElementById('field_batch').textContent = batch;
-            document.getElementById('field_sponsor').textContent = sponsor;
-            document.getElementById('field_picture').innerHTML = `<a href="${picture}" target="_blank" rel="noopener noreferrer">${picture}</a>`;
-            document.getElementById('field_facebook').innerHTML = facebook === '-' ? '-' : `<a href="${facebook}" target="_blank" rel="noopener noreferrer">${facebook}</a>`;
-            document.getElementById('field_code').textContent = code;
-            setAvatar(name, picture);
-
-            status.style.display = 'none';
-            card.style.display = 'block';
-        }
-
-        document.addEventListener('DOMContentLoaded', loadProfile);
-    </script>
 </body>
 </html>

@@ -48,7 +48,7 @@
 
         /* Sidebar Profile Section */
         .sidebar-profile { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative; }
-        .avatar { width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; overflow: hidden; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; overflow: hidden; }
         .user-info { font-size: 0.85rem; }
         .user-name { font-weight: 700; color: #1e293b; display: block; }
         .user-role { font-size: 0.75rem; color: var(--text-sub); }
@@ -70,7 +70,7 @@
 
         /* Mobile Header */
         .mobile-header { display: none; position: fixed; top: 0; width: 100%; height: 60px; background: white; border-bottom: 1px solid var(--border); z-index: 100; align-items: center; justify-content: space-between; padding: 0 20px; }
-        .m-avatar { width: 35px; height: 35px; min-width: 35px; min-height: 35px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; overflow: hidden; }
+        .m-avatar { width: 35px; height: 35px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; overflow: hidden; }
         .avatar img, .m-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .mobile-header .m-avatar { cursor: pointer; }
         .mobile-profile-menu {
@@ -320,18 +320,17 @@
             }
         }
 
-        async function fetchUserPictureByName(fullName) {
-            const name = (fullName || '').toString().trim();
-            if (!name) return DEFAULT_AVATAR_URL;
+        async function fetchUserPictureByEmail(email) {
+            if (!email) return DEFAULT_AVATAR_URL;
+            const targets = ['Applicants', 'Residents'];
 
-            const queries = [
-                supabaseClient.from('Applicants').select('Picture, picture').eq('full_name', name).maybeSingle(),
-                supabaseClient.from('Applicants').select('Picture, picture').eq('name', name).maybeSingle(),
-                supabaseClient.from('Applicants').select('Picture, picture').ilike('full_name', name).maybeSingle()
-            ];
+            for (const table of targets) {
+                const { data, error } = await supabaseClient
+                    .from(table)
+                    .select('Picture, picture')
+                    .eq('email', email)
+                    .maybeSingle();
 
-            for (const query of queries) {
-                const { data, error } = await query;
                 if (!error && data) {
                     const picture = normalizePictureUrl(data.Picture || data.picture);
                     if (picture) return picture;
@@ -360,7 +359,7 @@
             const mobileAvatar = document.querySelector('.mobile-header .m-avatar');
             setAvatarContent(mobileAvatar, '', initials);
 
-            const pictureUrl = await fetchUserPictureByName(fullName);
+            const pictureUrl = await fetchUserPictureByEmail(userEmail || userProfile.userEmail || '');
             setAvatarContent(desktopAvatar, pictureUrl, initials);
             setAvatarContent(mobileAvatar, pictureUrl, initials);
         }
