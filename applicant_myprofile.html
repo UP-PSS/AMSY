@@ -203,32 +203,22 @@
     <div class="header-bg"></div>
     
     <div class="photo-wrapper">
-        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&h=200&auto=format&fit=crop" alt="Profile" class="profile-img">
+        <img src="https://i.ibb.co/XZ4PZk67/icon-1.png" alt="Profile" class="profile-img" id="userPicture">
     </div>
 
     <div class="identity">
-        <h2 class="full-name" id="userName">Abel V. Paner Jr.</h2>
-        <span class="batch-text" id="userBatch">Batch 2024-A</span>
+        <h2 class="full-name" id="userName">Loading...</h2>
+        <span class="batch-text" id="userBatch">Batch -</span>
     </div>
 
     <div class="details-container">
-        <div class="detail-item">
-            <div class="icon-box">
-                <span class="material-symbols-outlined">mail</span>
-            </div>
-            <div class="info-content">
-                <span class="detail-label">Email Address</span>
-                <span class="detail-value">avpaner@up.edu.ph</span>
-            </div>
-        </div>
-
         <div class="detail-item">
             <div class="icon-box">
                 <span class="material-symbols-outlined">verified_user</span>
             </div>
             <div class="info-content">
                 <span class="detail-label">Sponsor</span>
-                <span class="detail-value">Alpha Rho Section</span>
+                <span class="detail-value" id="userSponsor">-</span>
             </div>
         </div>
 
@@ -237,8 +227,18 @@
                 <span class="material-symbols-outlined">public</span>
             </div>
             <div class="info-content">
-                <span class="detail-label">Facebook Profile</span>
-                <span class="detail-value">fb.com/abel.paner</span>
+                <span class="detail-label">Facebook</span>
+                <span class="detail-value" id="userFacebook">-</span>
+            </div>
+        </div>
+
+        <div class="detail-item">
+            <div class="icon-box">
+                <span class="material-symbols-outlined">pin</span>
+            </div>
+            <div class="info-content">
+                <span class="detail-label">Code</span>
+                <span class="detail-value" id="userCode">-</span>
             </div>
         </div>
     </div>
@@ -253,28 +253,102 @@
 </div>
 
 <script>
-    // 1. Generate QR Code
-    const qrData = "http://tiny.cc/2025_ACA_PSS";
-    const qr = qrcode(0, 'H');
-    qr.addData(qrData);
-    qr.make();
-    document.getElementById('qrcode').innerHTML = qr.createImgTag(5);
+    const SUPABASE_URL = 'https://havsuikahafqciurmaeq.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_pNAu0cwHGyX2Pn_DlX71Og_-t1KZq6C';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const DEFAULT_AVATAR_URL = 'https://i.ibb.co/XZ4PZk67/icon-1.png';
 
-    // 2. Download Logic with your specific filename format
+    function normalizePictureUrl(value) {
+        const url = (value || '').toString().trim();
+        return url || DEFAULT_AVATAR_URL;
+    }
+
+    function getStoredUserName() {
+        try {
+            const sessionProfile = sessionStorage.getItem('userProfile');
+            const localProfile = localStorage.getItem('userProfile');
+            const profile = sessionProfile ? JSON.parse(sessionProfile) : (localProfile ? JSON.parse(localProfile) : null);
+            return profile?.userName || '';
+        } catch (_err) {
+            return '';
+        }
+    }
+
+    async function fetchApplicantProfile() {
+        const fullName = getStoredUserName();
+        if (!fullName) return null;
+
+        const { data, error } = await supabaseClient
+            .from('Applicants')
+            .select('full_name, Batch, Sponsor, Picture, Facebook, code')
+            .eq('full_name', fullName)
+            .maybeSingle();
+
+        if (error || !data) return null;
+        return data;
+    }
+
+    function renderApplicantProfile(profile) {
+        const fullName = profile?.full_name || 'Applicant';
+        const batch = profile?.Batch || '-';
+        const sponsor = profile?.Sponsor || '-';
+        const facebook = profile?.Facebook || '-';
+        const code = profile?.code || '-';
+        const picture = normalizePictureUrl(profile?.Picture);
+
+        document.getElementById('userName').textContent = fullName;
+        document.getElementById('userBatch').textContent = `Batch ${batch}`;
+        document.getElementById('userSponsor').textContent = sponsor;
+        document.getElementById('userFacebook').textContent = facebook;
+        document.getElementById('userCode').textContent = code;
+        document.getElementById('userPicture').src = picture;
+
+        renderQrCode(code);
+    }
+
+    function renderQrCode(value) {
+        const qrData = (value || '').toString().trim() || 'NO_CODE';
+        const qr = qrcode(0, 'H');
+        qr.addData(qrData);
+        qr.make();
+        document.getElementById('qrcode').innerHTML = qr.createImgTag(5);
+    }
+
+    async function initializeProfile() {
+        const profile = await fetchApplicantProfile();
+        if (profile) {
+            renderApplicantProfile(profile);
+            return;
+        }
+
+        renderApplicantProfile({
+            full_name: getStoredUserName() || 'Applicant',
+            Batch: '-',
+            Sponsor: '-',
+            Picture: DEFAULT_AVATAR_URL,
+            Facebook: '-',
+            code: 'NO_CODE'
+        });
+    }
+
     function downloadQR() {
         const fullName = document.getElementById('userName').innerText.trim().replace(/\s+/g, '_');
         const batch = document.getElementById('userBatch').innerText.replace('Batch ', '').trim().replace(/\s+/g, '_');
         const fileName = `${batch}_${fullName}_QR.png`;
 
         const img = document.querySelector('#qrcode img');
+        if (!img) return;
+
         const link = document.createElement('a');
         link.href = img.src;
         link.download = fileName;
-        
+
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     }
+
+    document.addEventListener('DOMContentLoaded', initializeProfile);
 </script>
 
 </body>
