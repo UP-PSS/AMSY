@@ -51,7 +51,7 @@
 
         /* Sidebar Profile Section */
         .sidebar-profile { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative; }
-        .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+        .avatar { width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; overflow: hidden; }
         .user-info { font-size: 0.85rem; }
         .user-name { font-weight: 700; color: #1e293b; display: block; }
         .user-role { font-size: 0.75rem; color: var(--text-sub); }
@@ -73,7 +73,8 @@
 
         /* Mobile Header */
         .mobile-header { display: none; position: fixed; top: 0; width: 100%; height: 60px; background: white; border-bottom: 1px solid var(--border); z-index: 100; align-items: center; justify-content: space-between; padding: 0 20px; }
-        .m-avatar { width: 35px; height: 35px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
+        .m-avatar { width: 35px; height: 35px; min-width: 35px; min-height: 35px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; overflow: hidden; }
+        .avatar img, .m-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .mobile-header .m-avatar { cursor: pointer; }
         .mobile-profile-menu {
             position: absolute;
@@ -180,7 +181,6 @@
         <img src="logo.png" alt="Logo" class="logo">
         <div class="m-avatar" id="mobileAvatar">--</div>
         <div class="mobile-profile-menu" id="mobileProfileMenu">
-            <button class="profile-action" type="button" data-action="profile">View Profile</button>
             <button class="profile-action" type="button" data-action="logout">Log Out</button>
         </div>
     </header>
@@ -205,8 +205,7 @@
                 <span class="user-role">Resident</span>
             </div>
             <div class="profile-menu" id="desktopProfileMenu">
-                <button class="profile-action" type="button" data-action="profile">View Profile</button>
-                <button class="profile-action" type="button" data-action="logout">Log Out</button>
+                    <button class="profile-action" type="button" data-action="logout">Log Out</button>
             </div>
         </div>
     </aside>
@@ -232,6 +231,7 @@
 
         let userProfile = null;
         let userEmail = null;
+        const DEFAULT_AVATAR_URL = 'https://i.ibb.co/XZ4PZk67/icon-1.png';
 
         function loadUserData() {
             // Try sessionStorage first, then localStorage
@@ -311,7 +311,42 @@
             }
         }
 
-        function updateSidebar() {
+        function normalizePictureUrl(value) {
+            const url = (value || '').toString().trim();
+            return url || '';
+        }
+
+        function setAvatarContent(container, pictureUrl, initials) {
+            if (!container) return;
+            if (pictureUrl) {
+                container.innerHTML = `<img src="${pictureUrl}" alt="User avatar" loading="eager" decoding="async" referrerpolicy="no-referrer">`;
+            } else {
+                container.textContent = initials || '--';
+            }
+        }
+
+        async function fetchUserPictureByName(fullName) {
+            const name = (fullName || '').toString().trim();
+            if (!name) return DEFAULT_AVATAR_URL;
+
+            const queries = [
+                supabaseClient.from('Residents').select('Picture, picture').eq('full_name', name).maybeSingle(),
+                supabaseClient.from('Residents').select('Picture, picture').eq('name', name).maybeSingle(),
+                supabaseClient.from('Residents').select('Picture, picture').ilike('full_name', name).maybeSingle()
+            ];
+
+            for (const query of queries) {
+                const { data, error } = await query;
+                if (!error && data) {
+                    const picture = normalizePictureUrl(data.Picture || data.picture);
+                    if (picture) return picture;
+                }
+            }
+
+            return DEFAULT_AVATAR_URL;
+        }
+
+        async function updateSidebar() {
             if (!userProfile) return;
 
             const fullName = userProfile.userName || 'User';
@@ -325,7 +360,7 @@
             const desktopName = document.querySelector('.sidebar-profile .user-name');
             const desktopRole = document.querySelector('.sidebar-profile .user-role');
             
-            if (desktopAvatar) desktopAvatar.innerText = initials;
+            setAvatarContent(desktopAvatar, '', initials);
             if (desktopName) desktopName.innerText = fullName;
             // Show category under name, or email if no category
             if (desktopRole) {
@@ -338,7 +373,11 @@
 
             // Update mobile header
             const mobileAvatar = document.querySelector('.mobile-header .m-avatar');
-            if (mobileAvatar) mobileAvatar.innerText = initials;
+            setAvatarContent(mobileAvatar, '', initials);
+
+            const pictureUrl = await fetchUserPictureByName(fullName);
+            setAvatarContent(desktopAvatar, pictureUrl, initials);
+            setAvatarContent(mobileAvatar, pictureUrl, initials);
         }
 
         function slugify(text) {
@@ -474,14 +513,6 @@
             window.location.href = 'index.html';
         }
 
-        function navigateToProfile() {
-            const profileIframe = Array.from(document.querySelectorAll('iframe')).find((iframe) => iframe.src.includes('profile.html'));
-            if (profileIframe && profileIframe.dataset.view) {
-                show(profileIframe.dataset.view);
-                return;
-            }
-            window.location.href = 'profile.html';
-        }
 
         function setupDesktopProfileMenu() {
             const trigger = document.getElementById('desktopProfileTrigger');
@@ -506,8 +537,6 @@
                 const action = event.target?.dataset?.action;
                 if (action === 'logout') {
                     handleLogout();
-                } else if (action === 'profile') {
-                    navigateToProfile();
                 }
                 menu.classList.remove('show');
             });
@@ -529,8 +558,6 @@
                 const action = event.target?.dataset?.action;
                 if (action === 'logout') {
                     handleLogout();
-                } else if (action === 'profile') {
-                    navigateToProfile();
                 }
                 menu.classList.remove('show');
             });
